@@ -1,0 +1,39 @@
+{
+  "name": "cobrop-agent",
+  "version": "0.1.0",
+  "description": "CoBrop's autonomous platform agent — free-tier only",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "seed": "tsx scripts/seed.ts",
+    "learn": "tsx scripts/learn-from-platform.ts",
+    "learn:web": "tsx scripts/learn-from-web.ts",
+    "learn:social": "tsx scripts/learn-from-social.ts",
+    "learn:code": "tsx scripts/learn-from-platform-code.ts",
+    "learn:all": "npm run learn && npm run learn:web && npm run learn:code && npm run learn:social",
+    "trigger": "tsx scripts/trigger-task.ts",
+    "schema:push": "psql $DATABASE_URL -f schema.sql",
+    "deploy:vercel": "vercel deploy --prod",
+    "deploy:cf": "wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:agent": "tsx scripts/test-agent.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@supabase/supabase-js": "^2.46.1",
+    "dotenv": "^17.4.2",
+    "groq-sdk": "^0.9.0",
+    "hono": "^4.6.12",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

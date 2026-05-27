@@ -1,0 +1,15 @@
+name = "cobrop-agent"
+main = "dist/index.js"
+compatibility_date = "2025-01-01"
+node_compat = true
+
+[vars]
+PUBLIC_URL = "https://cobrop-agent.<your-subdomain>.workers.dev"
+
+# Set secrets with:
+#   wrangler secret put GROQ_API_KEY
+#   wrangler secret put SUPABASE_URL
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   wrangler secret put WEBHOOK_SECRET
+#   wrangler secret put CRON_SECRET
+#   wrangler secret put GEMINI_API_KEY

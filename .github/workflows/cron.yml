@@ -1,0 +1,41 @@
+name: CoBrop Agent · cron
+
+on:
+  schedule:
+    # Daily price suggestions at 06:00 UTC (09:00 EAT)
+    - cron: '0 6 * * *'
+    # Daily broker outreach at 06:30 UTC
+    - cron: '30 6 * * *'
+    # Hourly broker nudges
+    - cron: '5 * * * *'
+    # Weekly blog draft on Monday 07:00 UTC
+    - cron: '0 7 * * 1'
+    # Weekly re-learn from platform (Sunday 03:00 UTC, quiet hours)
+    - cron: '0 3 * * 0'
+
+  workflow_dispatch: # allow manual trigger from the GitHub UI
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine capability
+        id: pick
+        run: |
+          case "${{ github.event.schedule }}" in
+            "0 6 * * *")  echo "cap=price-suggest"   >> $GITHUB_OUTPUT ;;
+            "30 6 * * *") echo "cap=broker-outreach" >> $GITHUB_OUTPUT ;;
+            "5 * * * *")  echo "cap=nudge-broker"    >> $GITHUB_OUTPUT ;;
+            "0 7 * * 1")  echo "cap=blog-draft"      >> $GITHUB_OUTPUT ;;
+            "0 3 * * 0")  echo "cap=learn"           >> $GITHUB_OUTPUT ;;
+            *)            echo "cap=nudge-broker"    >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Trigger agent cron
+        env:
+          AGENT_URL: ${{ secrets.AGENT_URL }}
+          AGENT_CRON_SECRET: ${{ secrets.AGENT_CRON_SECRET }}
+        run: |
+          curl -fsS -X POST \
+            -H "X-Cron-Secret: $AGENT_CRON_SECRET" \
+            "$AGENT_URL/agent/cron/${{ steps.pick.outputs.cap }}"

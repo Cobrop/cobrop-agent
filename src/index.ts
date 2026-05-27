@@ -1,0 +1,41 @@
+// src/index.ts — server entry. Runs the Hono HTTP server + the queue worker.
+
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { serve } from '@hono/node-server';
+import { config } from './config.js';
+import { startWorker } from './queue/worker.js';
+
+import { health } from './routes/health.js';
+import { webhooks } from './routes/webhooks.js';
+import { approvals } from './routes/approvals.js';
+import { agent } from './routes/agent.js';
+
+const app = new Hono();
+
+app.use('*', cors({
+  origin: '*', // tighten this in production
+  allowMethods: ['GET', 'POST'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Webhook-Secret', 'X-Cron-Secret'],
+}));
+
+app.route('/health', health);
+app.route('/webhooks', webhooks);
+app.route('/approvals', approvals);
+app.route('/agent', agent);
+
+app.get('/', (c) =>
+  c.json({
+    service: 'cobrop-agent',
+    docs: 'See README.md',
+    endpoints: ['/health', '/webhooks/*', '/approvals', '/agent/draft', '/agent/run', '/agent/kpis', '/agent/activity'],
+  }),
+);
+
+const port = config.PORT;
+console.log(`\n✓ CoBrop Agent · listening on http://localhost:${port}`);
+console.log(`✓ LLM: groq (${config.GROQ_MODEL})${config.GEMINI_API_KEY ? ` · fallback: gemini (${config.GEMINI_MODEL})` : ''}`);
+console.log(`✓ Supabase: ${config.SUPABASE_URL.replace(/^https?:\/\//, '').slice(0, 40)}\n`);
+
+serve({ fetch: app.fetch, port });
+startWorker();
