@@ -1,0 +1,235 @@
+/* ============================================================
+   JUDAH FINANCIAL SOLUTIONS — Design Tokens
+   colors_and_type.css
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   GOOGLE FONTS IMPORT
+   Primary: Montserrat (headlines, body, tagline)
+   Secondary: Barlow Condensed (data callouts, large numerals)
+   NOTE: Substituting for brand's geometric sans — if actual
+   brand fonts are available, replace these imports.
+   ----------------------------------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@400;600;700;800&display=swap');
+
+:root {
+  /* ----------------------------------------------------------
+     BASE COLOR PALETTE
+     Extracted from logo: deep steel blue + cyan accent
+  ---------------------------------------------------------- */
+
+  /* Primary Blues */
+  --color-primary-900: #0D2B35;
+  --color-primary-800: #0D3B4E;
+  --color-primary-700: #144D65;
+  --color-primary-600: #1C5F7B;   /* ← Core brand blue */
+  --color-primary-500: #287492;
+  --color-primary-400: #3D8FAD;
+  --color-primary-300: #5AAAC7;
+  --color-primary-200: #8ECADD;
+  --color-primary-100: #C0E4EF;
+  --color-primary-50:  #E0F8FB;
+
+  /* Cyan Accent (tagline / highlight color) */
+  --color-cyan-600:    #009AAD;
+  --color-cyan-500:    #00BDD4;
+  --color-cyan-400:    #00D4E8;   /* ← Core cyan accent */
+  --color-cyan-300:    #33DEED;
+  --color-cyan-200:    #66E8F2;
+  --color-cyan-100:    #B3F4F9;
+  --color-cyan-50:     #E6FAFB;
+
+  /* Neutrals */
+  --color-neutral-900: #0A1A20;
+  --color-neutral-800: #1A2E36;
+  --color-neutral-700: #2E4550;
+  --color-neutral-600: #455D6A;
+  --color-neutral-500: #6B8A95;
+  --color-neutral-400: #8FAAB4;
+  --color-neutral-300: #B4C9D0;
+  --color-neutral-200: #D5E4E9;
+  --color-neutral-100: #EAF2F5;
+  --color-neutral-50:  #F5F9FA;
+
+  /* ----------------------------------------------------------
+     SEMANTIC COLOR ROLES
+  ---------------------------------------------------------- */
+
+  /* Backgrounds */
+  --bg-base:           #F5F9FA;
+  --bg-surface:        #FFFFFF;
+  --bg-dark:           #0D3B4E;
+  --bg-darker:         #0D2B35;
+  --bg-brand:          #1C5F7B;
+  --bg-accent:         #00D4E8;
+  --bg-card-light:     #FFFFFF;
+  --bg-card-dark:      #144D65;
+  --bg-muted:          #EAF2F5;
+
+  /* Foreground / Text */
+  --fg-primary:        #0D2B35;
+  --fg-secondary:      #455D6A;
+  --fg-muted:          #6B8A95;
+  --fg-on-dark:        #FFFFFF;
+  --fg-on-dark-muted:  rgba(255,255,255,0.65);
+  --fg-accent:         #00D4E8;
+  --fg-brand:          #1C5F7B;
+
+  /* Borders */
+  --border-light:      #D5E4E9;
+  --border-medium:     #B4C9D0;
+  --border-accent:     #00D4E8;
+  --border-brand:      #1C5F7B;
+
+  /* Status */
+  --color-success:     #1DB87A;
+  --color-warning:     #F5A623;
+  --color-error:       #E5365A;
+  --color-info:        #00D4E8;
+
+  /* ----------------------------------------------------------
+     TYPOGRAPHY TOKENS
+  ---------------------------------------------------------- */
+
+  /* Font Families */
+  --font-display:      'Montserrat', sans-serif;
+  --font-body:         'Montserrat', sans-serif;
+  --font-data:         'Barlow Condensed', sans-serif;
+  --font-mono:         'Courier New', monospace;
+
+  /* Font Weights */
+  --weight-regular:    400;
+  --weight-medium:     500;
+  --weight-semibold:   600;
+  --weight-bold:       700;
+  --weight-extrabold:  800;
+  --weight-black:      900;
+
+  /* Type Scale — base 16px */
+  --text-xs:     0.75rem;    /* 12px */
+  --text-sm:     0.875rem;   /* 14px */
+  --text-base:   1rem;       /* 16px */
+  --text-md:     1.125rem;   /* 18px */
+  --text-lg:     1.25rem;    /* 20px */
+  --text-xl:     1.5rem;     /* 24px */
+  --text-2xl:    1.875rem;   /* 30px */
+  --text-3xl:    2.25rem;    /* 36px */
+  --text-4xl:    3rem;       /* 48px */
+  --text-5xl:    3.75rem;    /* 60px */
+  --text-6xl:    4.5rem;     /* 72px */
+
+  /* Line Heights */
+  --leading-tight:   1.1;
+  --leading-snug:    1.25;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.65;
+
+  /* Letter Spacing */
+  --tracking-tight:   -0.02em;
+  --tracking-normal:   0em;
+  --tracking-wide:     0.05em;
+  --tracking-wider:    0.1em;
+  --tracking-widest:   0.15em;
+
+  /* ----------------------------------------------------------
+     SEMANTIC TYPE ROLES
+  ---------------------------------------------------------- */
+
+  /* ------ Headings ------ */
+  /* H1 — Hero / Campaign headlines */
+  --h1-font:       var(--font-display);
+  --h1-weight:     var(--weight-extrabold);
+  --h1-size:       var(--text-5xl);
+  --h1-leading:    var(--leading-tight);
+  --h1-tracking:   var(--tracking-tight);
+  --h1-transform:  uppercase;
+
+  /* H2 — Section titles */
+  --h2-font:       var(--font-display);
+  --h2-weight:     var(--weight-bold);
+  --h2-size:       var(--text-4xl);
+  --h2-leading:    var(--leading-snug);
+  --h2-tracking:   var(--tracking-tight);
+  --h2-transform:  none;
+
+  /* H3 — Card titles, feature headers */
+  --h3-font:       var(--font-display);
+  --h3-weight:     var(--weight-bold);
+  --h3-size:       var(--text-2xl);
+  --h3-leading:    var(--leading-snug);
+  --h3-tracking:   var(--tracking-normal);
+  --h3-transform:  none;
+
+  /* H4 — Sub-section labels */
+  --h4-font:       var(--font-display);
+  --h4-weight:     var(--weight-semibold);
+  --h4-size:       var(--text-xl);
+  --h4-leading:    var(--leading-normal);
+  --h4-tracking:   var(--tracking-normal);
+  --h4-transform:  none;
+
+  /* Body */
+  --body-font:     var(--font-body);
+  --body-weight:   var(--weight-regular);
+  --body-size:     var(--text-base);
+  --body-leading:  var(--leading-relaxed);
+
+  /* Caption / Meta */
+  --caption-font:     var(--font-body);
+  --caption-weight:   var(--weight-medium);
+  --caption-size:     var(--text-sm);
+  --caption-leading:  var(--leading-normal);
+  --caption-tracking: var(--tracking-wide);
+  --caption-transform: uppercase;
+
+  /* Tagline */
+  --tagline-font:     var(--font-display);
+  --tagline-weight:   var(--weight-semibold);
+  --tagline-size:     var(--text-sm);
+  --tagline-tracking: var(--tracking-widest);
+  --tagline-transform: uppercase;
+  --tagline-color:    var(--color-cyan-400);
+
+  /* Data / Stat callout */
+  --stat-font:     var(--font-data);
+  --stat-weight:   var(--weight-bold);
+  --stat-size:     var(--text-6xl);
+  --stat-leading:  var(--leading-tight);
+  --stat-tracking: var(--tracking-tight);
+
+  /* ----------------------------------------------------------
+     SPACING TOKENS
+  ---------------------------------------------------------- */
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-8:   32px;
+  --space-10:  40px;
+  --space-12:  48px;
+  --space-16:  64px;
+  --space-20:  80px;
+  --space-24:  96px;
+
+  /* ----------------------------------------------------------
+     BORDER RADIUS
+  ---------------------------------------------------------- */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  24px;
+  --radius-pill: 9999px;
+
+  /* ----------------------------------------------------------
+     SHADOWS
+  ---------------------------------------------------------- */
+  --shadow-sm:    0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md:    0 4px 24px rgba(0, 0, 0, 0.08);
+  --shadow-lg:    0 8px 32px rgba(0, 0, 0, 0.12);
+  --shadow-dark:  0 8px 32px rgba(0, 0, 0, 0.30);
+  --shadow-cyan:  0 4px 24px rgba(0, 212, 232, 0.25);
+  --shadow-brand: 0 4px 24px rgba(28, 95, 123, 0.30);
+}
