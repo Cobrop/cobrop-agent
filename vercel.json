@@ -1,8 +1,11 @@
 {
-  "version": 2,
-  "buildCommand": "npm run build",
-  "framework": null,
   "rewrites": [
     { "source": "/(.*)", "destination": "/api/index" }
+  ],
+  "crons": [
+    {
+      "path": "/agent/cron/tick?secret=__SET_CRON_SECRET_IN_VERCEL_ENV__&max=5",
+      "schedule": "* * * * *"
+    }
   ]
 }
