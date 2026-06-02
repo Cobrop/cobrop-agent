@@ -25,7 +25,7 @@ approvals.get('/', async (c) => {
 // POST /approvals/:id/approve
 approvals.post('/:id/approve', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{ admin_id?: string; edited_proposal?: Record<string, unknown> }>().catch(() => ({}));
+  const body = await c.req.json().catch(() => ({})) as { admin_id?: string; edited_proposal?: Record<string, unknown> };
 
   const sb = supabase();
   const { data: ap, error: fe } = await sb.from('agent_approvals').select('*').eq('id', id).single();
@@ -68,7 +68,7 @@ approvals.post('/:id/approve', async (c) => {
 // POST /approvals/:id/reject
 approvals.post('/:id/reject', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{ admin_id?: string; reason?: string }>().catch(() => ({}));
+  const body = await c.req.json().catch(() => ({})) as { admin_id?: string; reason?: string };
   const sb = supabase();
 
   const { data: ap, error } = await sb.from('agent_approvals').select('*').eq('id', id).single();

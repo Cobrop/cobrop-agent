@@ -11,7 +11,7 @@ You make decisions about brokers, listings, and content. Your decisions go throu
 // ── Lead reply ────────────────────────────────────────────────
 export const leadReplyPrompt = (input: {
   inquiry: { text: string; lang: string; broker_handle: string };
-  property: { title: string; address: string; price: string; key_features: string[] };
+  property: { title: string; address: string; price: string; key_features: string[]; broker_handle: string };
 }) => `An inquiry just landed for one of CoBrop's listings. Generate a single auto-reply.
 
 PROPERTY: ${input.property.title} · ${input.property.address} · ${input.property.price}

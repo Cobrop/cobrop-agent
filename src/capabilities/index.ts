@@ -11,7 +11,7 @@ import { blogDraft } from './blog-draft.js';
 import { socialPost } from './social-post.js';
 import { nudgeBroker } from './nudge-broker.js';
 
-const list: Capability[] = [
+const list: Capability<any>[] = [
   leadReply,
   listingOnboard,
   fraudCheck,
