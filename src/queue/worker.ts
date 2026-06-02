@@ -23,12 +23,30 @@ export function stopWorker() {
   running = false;
 }
 
+// Drain a small batch of tasks on demand. Used by serverless cron in deploys
+// where the in-process polling loop can't run between requests.
+export async function drainOnce(max = 5): Promise<{ processed: number; queued: number }> {
+  let processed = 0;
+  for (let i = 0; i < max; i++) {
+    const task = await claimNextTask();
+    if (!task || !task.id) break;
+    await runTask(task);
+    processed++;
+  }
+  // Estimate remaining
+  const { count } = await supabase()
+    .from('agent_tasks')
+    .select('id', { count: 'estimated', head: true })
+    .eq('status', 'pending');
+  return { processed, queued: count ?? 0 };
+}
+
 async function loop() {
   while (running) {
     try {
       while (inflight < config.QUEUE_CONCURRENCY) {
         const task = await claimNextTask();
-        if (!task || !task.id) break;
+        if (!task) break;
         inflight++;
         // Fire-and-forget; track inflight via counter
         runTask(task).finally(() => { inflight--; });

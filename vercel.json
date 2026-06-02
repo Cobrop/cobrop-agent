@@ -8,7 +8,7 @@
   "crons": [
     {
       "path": "/agent/cron/tick?secret=__SET_CRON_SECRET_IN_VERCEL_ENV__&max=5",
-      "schedule": "0 0 * * *"
+      "schedule": "* * * * *"
     }
   ]
 }

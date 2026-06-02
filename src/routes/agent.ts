@@ -52,12 +52,25 @@ agent.post('/run', verifyAdmin, async (c) => {
   return c.json({ enqueued: true, task_id: data.id });
 });
 
-// ── Cron-triggered batch runs (called by GitHub Actions) ─────────
+// ── Cron-triggered batch runs (called by GitHub Actions or Vercel cron) ──
+//
+// Special endpoint: /agent/cron/tick drains a few pending tasks from the
+// queue. Vercel cron hits this every minute to keep the agent moving in
+// serverless deploys (where the in-process worker can't run between requests).
+agent.post('/cron/tick', verifyCron, async (c) => {
+  const max = Math.min(Number(c.req.query('max')) || 5, 20);
+  const { drainOnce } = await import('../queue/worker.js');
+  const result = await drainOnce(max);
+  return c.json({ drained: result.processed, queued_remaining: result.queued });
+});
+
+// Batch enqueue by capability (one row per stale listing, etc).
 agent.post('/cron/:capability', verifyCron, async (c) => {
   const capability = c.req.param('capability') as CapabilityName;
   if (!listCapabilities().includes(capability)) {
     return c.json({ error: 'unknown capability' }, 400);
   }
+
   // The cron job picks the inputs to enqueue. Examples:
   if (capability === 'price-suggest') {
     // Find stale listings

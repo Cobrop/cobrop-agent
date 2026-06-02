@@ -1,4 +1,6 @@
-// src/index.ts — server entry. Runs the Hono HTTP server + the queue worker.
+// src/index.ts — server entry. Runs the Hono HTTP server. The queue worker
+// runs in-process for local dev; on Vercel/CF, tasks are processed by the
+// /agent/cron/tick endpoint hit on a schedule.
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -28,14 +30,23 @@ app.get('/', (c) =>
   c.json({
     service: 'cobrop-agent',
     docs: 'See README.md',
-    endpoints: ['/health', '/webhooks/*', '/approvals', '/agent/draft', '/agent/run', '/agent/kpis', '/agent/activity'],
+    endpoints: ['/health', '/webhooks/*', '/approvals', '/agent/draft', '/agent/run', '/agent/kpis', '/agent/activity', '/agent/cron/tick'],
   }),
 );
 
-const port = config.PORT;
-console.log(`\n✓ CoBrop Agent · listening on http://localhost:${port}`);
-console.log(`✓ LLM: groq (${config.GROQ_MODEL})${config.GEMINI_API_KEY ? ` · fallback: gemini (${config.GEMINI_MODEL})` : ''}`);
-console.log(`✓ Supabase: ${config.SUPABASE_URL.replace(/^https?:\/\//, '').slice(0, 40)}\n`);
+// In serverless environments (Vercel / Cloudflare), don't start the
+// in-process worker — it would die after the response. Instead a scheduled
+// cron hits /agent/cron/tick to drain a few tasks per minute.
+const IS_SERVERLESS = !!(process.env.VERCEL || process.env.CF_PAGES);
 
-serve({ fetch: app.fetch, port });
-startWorker();
+if (!IS_SERVERLESS) {
+  const port = config.PORT;
+  console.log(`\n✓ CoBrop Agent · listening on http://localhost:${port}`);
+  console.log(`✓ LLM: groq (${config.GROQ_MODEL})${config.GEMINI_API_KEY ? ` · fallback: gemini (${config.GEMINI_MODEL})` : ''}`);
+  console.log(`✓ Supabase: ${config.SUPABASE_URL.replace(/^https?:\/\//, '').slice(0, 40)}\n`);
+
+  serve({ fetch: app.fetch, port });
+  startWorker();
+}
+
+export default app;
