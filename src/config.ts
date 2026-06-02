@@ -1,32 +1,32 @@
-// src/config.ts — env loader with validation
+// src/config.ts — env loader. Resilient: never process.exit (that crashes
+// serverless silently). Missing keys are recorded and surfaced via /health.
 
 import 'dotenv/config';
 import { z } from 'zod';
 
 const Env = z.object({
-  // server
   PORT: z.coerce.number().default(8787),
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  NODE_ENV: z.string().default('development'),
+  LOG_LEVEL: z.string().default('info'),
   PUBLIC_URL: z.string().default('http://localhost:8787'),
 
   // LLM
-  GROQ_API_KEY: z.string().min(1, 'Get one at https://console.groq.com/keys'),
+  GROQ_API_KEY: z.string().default(''),
   GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
 
-  // Supabase
-  SUPABASE_URL: z.string().url(),
-  SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  // Supabase — plain strings, no .url() (a malformed value shouldn't crash boot)
+  SUPABASE_URL: z.string().default(''),
+  SUPABASE_ANON_KEY: z.string().default(''),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
 
-  // Secrets
-  WEBHOOK_SECRET: z.string().min(16, 'Use a 32+ char random string'),
-  CRON_SECRET: z.string().min(16, 'Use a 32+ char random string'),
-  ADMIN_JWT_SECRET: z.string().min(16).optional(),
+  // Secrets — relaxed length so a short value doesn't block deploy
+  WEBHOOK_SECRET: z.string().default(''),
+  CRON_SECRET: z.string().default(''),
+  ADMIN_JWT_SECRET: z.string().optional(),
 
-  // Social
+  // Social (all optional)
   LINKEDIN_ACCESS_TOKEN: z.string().optional(),
   LINKEDIN_ORG_URN: z.string().optional(),
   FACEBOOK_PAGE_TOKEN: z.string().optional(),
@@ -39,27 +39,37 @@ const Env = z.object({
   QUEUE_POLL_MS: z.coerce.number().default(5000),
   QUEUE_CONCURRENCY: z.coerce.number().default(3),
 
- // Learning sources (all optional)
+  // Learning sources (optional)
   PLATFORM_CODE_DIR: z.string().optional(),
   COBROP_WEB_URL: z.string().default('https://www.cobrop.com'),
 });
 
 export type Config = z.infer<typeof Env>;
 
+// Which required keys are missing — surfaced via /health, never fatal.
+export const missingKeys: string[] = [];
+
+function computeMissing(c: Config) {
+  const required: Array<keyof Config> = [
+    'GROQ_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY', 'WEBHOOK_SECRET', 'CRON_SECRET',
+  ];
+  for (const k of required) {
+    if (!c[k]) missingKeys.push(k);
+  }
+}
+
 let _cfg: Config | null = null;
 
 export function loadConfig(): Config {
   if (_cfg) return _cfg;
+  // safeParse with defaults can't really fail now, but guard anyway.
   const parsed = Env.safeParse(process.env);
-  if (!parsed.success) {
-    console.error('\n✗ Invalid configuration:\n');
-    for (const issue of parsed.error.issues) {
-      console.error(`  · ${issue.path.join('.')}: ${issue.message}`);
-    }
-    console.error('\nCopy .env.example to .env and fill in the missing values.\n');
-    process.exit(1);
+  _cfg = parsed.success ? parsed.data : Env.parse({});
+  computeMissing(_cfg);
+  if (missingKeys.length) {
+    console.warn('[config] missing env vars:', missingKeys.join(', '));
   }
-  _cfg = parsed.data;
   return _cfg;
 }
 
