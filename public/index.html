@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CoBrop Agent · API</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0F2A36;
+    color: #DCE7EC;
+    display: grid; place-items: center;
+    padding: 24px;
+  }
+  .card {
+    max-width: 460px; width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 32px;
+  }
+  .mark {
+    width: 44px; height: 44px; border-radius: 11px;
+    background: linear-gradient(135deg, #06B6D4, #1C5F7B);
+    display: grid; place-items: center;
+    font-weight: 800; color: #fff; font-size: 17px; letter-spacing: -0.02em;
+    margin-bottom: 18px;
+  }
+  h1 { margin: 0 0 4px 0; font-size: 18px; color: #fff; letter-spacing: -0.01em; }
+  .sub { font-size: 12px; color: #06B6D4; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; }
+  p { font-size: 13.5px; line-height: 1.6; color: rgba(220,231,236,0.75); }
+  .status {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12px; font-weight: 600;
+    background: rgba(29,184,122,0.12); color: #4ade80;
+    padding: 5px 11px; border-radius: 9999px; margin-top: 4px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #1DB87A; }
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px; background: rgba(0,0,0,0.25);
+    padding: 2px 6px; border-radius: 5px; color: #A8E4EE;
+  }
+  .ep { margin: 14px 0 0; padding: 0; list-style: none; }
+  .ep li { font-size: 12.5px; padding: 5px 0; border-top: 1px solid rgba(255,255,255,0.06); }
+  .ep li:first-child { border-top: 0; }
+  a { color: #06B6D4; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">CB</div>
+    <div class="sub">CoBrop Agent</div>
+    <h1>Autonomous platform agent · API</h1>
+    <span class="status"><span class="dot"></span>Service online</span>
+    <p>This is the backend API for the CoBrop Agent. It runs the queue worker, capabilities, and approval endpoints. There's no UI here — open the monitoring dashboard separately.</p>
+    <ul class="ep">
+      <li><code>GET /health</code> — service status</li>
+      <li><code>GET /approvals?status=pending</code> — review queue</li>
+      <li><code>GET /agent/activity</code> — live activity</li>
+      <li><code>POST /agent/run</code> — trigger a capability</li>
+      <li><code>POST /webhooks/*</code> — Supabase event receivers</li>
+    </ul>
+    <p style="margin-top:18px;font-size:12px;">Check status: <a href="/health">/health</a></p>
+  </div>
+</body>
+</html>
