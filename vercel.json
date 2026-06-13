@@ -1,11 +1,14 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
+    { "source": "/health/:path*", "destination": "/api/index" },
+    { "source": "/webhooks/:path*", "destination": "/api/index" },
+    { "source": "/approvals/:path*", "destination": "/api/index" },
+    { "source": "/agent/:path*", "destination": "/api/index" }
   ],
   "crons": [
     {
-      "path": "/agent/cron/tick?secret=__SET_CRON_SECRET_IN_VERCEL_ENV__&max=5",
-      "schedule": "0 0 * * *"
+      "path": "/agent/cron/tick?secret=__SET_CRON_SECRET_IN_VERCEL_ENV__&max=10",
+      "schedule": "0 6 * * *"
     }
   ]
 }

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CoBrop Agent · Live Console</title>
+<link rel="icon" type="image/png" href="assets/cobrop-mark.png" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="styles.css" />
+
+<style>
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--cb-bg); }
+  #root { min-height: 100vh; }
+
+  /* Setup modal */
+  .setup-overlay {
+    position: fixed; inset: 0;
+    background: rgba(15,42,54,0.65);
+    display: grid; place-items: center;
+    z-index: 100;
+    font-family: var(--font-body);
+  }
+  .setup-card {
+    background: var(--cb-surface);
+    border-radius: 14px;
+    border: 1px solid var(--cb-line);
+    padding: 24px 26px;
+    width: 460px;
+    box-shadow: 0 20px 50px rgba(15,42,54,0.3);
+  }
+  .setup-card h2 {
+    margin: 0 0 4px 0;
+    font-size: 18px;
+    color: var(--cb-ink);
+    letter-spacing: -0.01em;
+  }
+  .setup-card p {
+    margin: 0 0 18px 0;
+    font-size: 12.5px;
+    color: var(--cb-ink-3);
+    line-height: 1.5;
+  }
+  .setup-field {
+    display: block;
+    margin-bottom: 12px;
+  }
+  .setup-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--cb-ink-2);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+  .setup-field input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--cb-line-strong);
+    border-radius: 8px;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--cb-ink);
+    font-family: var(--font-mono);
+  }
+  .setup-field input:focus {
+    outline: none;
+    border-color: var(--cb-cyan);
+    box-shadow: 0 0 0 3px rgba(6,182,212,0.15);
+  }
+  .setup-card .err {
+    background: var(--cb-error-soft);
+    border: 1px solid #F2C2CC;
+    color: #b92444;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    margin: 4px 0 12px 0;
+  }
+  .setup-card .ok {
+    background: var(--cb-success-soft);
+    border: 1px solid #BFE6D2;
+    color: #0e8b58;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    margin: 4px 0 12px 0;
+  }
+  .setup-actions {
+    display: flex; gap: 8px;
+    margin-top: 14px;
+  }
+
+  /* Live status bar — top of main content */
+  .live-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    background: var(--cb-surface);
+    border: 1px solid var(--cb-line);
+    border-radius: 8px;
+    font-size: 11px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .live-status-bar__err {
+    color: #b92444;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .live-status-bar__sync {
+    margin-left: auto;
+    color: var(--cb-ink-3);
+    font-size: 10.5px;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="agent-icons.jsx"></script>
+<script type="text/babel" src="agent-data.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="agent-shell.jsx"></script>
+<script type="text/babel" src="agent-screens.jsx"></script>
+<script type="text/babel" src="agent-screens-extra.jsx"></script>
+<script type="text/babel" src="agent-console.jsx"></script>
+<script type="text/babel" src="live-console.jsx"></script>
+</body>
+</html>
