@@ -5,7 +5,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
-import { serveStatic } from '@hono/node-server/serve-static';
 import { config } from './config.js';
 import { startWorker } from './queue/worker.js';
 
@@ -38,7 +37,6 @@ app.get('/', (c) =>
 // ── Static file serving (admin dashboard + assets in public/) ────
 // Catches any request not matched by the API routes above.
 // Files live in public/ — e.g. public/live-admin.html → /live-admin.html
-app.use('/*', serveStatic({ root: './public' }));
 
 // In serverless environments (Vercel / Cloudflare), don't start the
 // in-process worker — it would die after the response. Instead a scheduled
