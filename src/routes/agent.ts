@@ -57,7 +57,8 @@ agent.post('/run', verifyAdmin, async (c) => {
 // Special endpoint: /agent/cron/tick drains a few pending tasks from the
 // queue. Vercel cron hits this every minute to keep the agent moving in
 // serverless deploys (where the in-process worker can't run between requests).
-agent.post('/cron/tick', verifyCron, async (c) => {
+// Vercel cron jobs always use GET — support both GET and POST for flexibility.
+agent.on(['GET', 'POST'], '/cron/tick', verifyCron, async (c) => {
   const max = Math.min(Number(c.req.query('max')) || 5, 20);
   const { drainOnce } = await import('../queue/worker.js');
   const result = await drainOnce(max);
@@ -130,99 +131,4 @@ agent.get('/activity', verifyAdmin, async (c) => {
     .limit(limit);
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ events: data });
-});
-
-// ── Marketing: social-post feed + schedule ────────────────────
-agent.get('/marketing/feed', verifyAdmin, async (c) => {
-  const limit = Math.min(Number(c.req.query('limit')) || 30, 100);
-  const [actRes, apRes] = await Promise.all([
-    supabase()
-      .from('agent_actions')
-      .select('id, capability, status, ref_entity, details, created_at')
-      .eq('capability', 'social-post')
-      .order('created_at', { ascending: false })
-      .limit(limit),
-    supabase()
-      .from('agent_approvals')
-      .select('id, capability, status, what, proposal, evidence, confidence, created_at')
-      .eq('capability', 'social-post')
-      .in('status', ['pending', 'snoozed'])
-      .order('created_at', { ascending: false })
-      .limit(20),
-  ]);
-  return c.json({
-    executed:          actRes.data ?? [],
-    pending_approvals: apRes.data ?? [],
-  });
-});
-
-agent.post('/marketing/schedule', verifyAdmin, async (c) => {
-  const body = await c.req.json<{
-    channel: string; topic: string; topic_sub?: string;
-    language?: string; locale?: string;
-  }>();
-  if (!body.topic) return c.json({ error: 'topic required' }, 400);
-  const { data, error } = await supabase()
-    .from('agent_tasks')
-    .insert({
-      capability: 'social-post',
-      input: {
-        channel:   body.channel   || 'linkedin',
-        topic:     body.topic,
-        topic_sub: body.topic_sub || '',
-        language:  body.language  || 'English',
-        locale:    body.locale    || 'global',
-      },
-    })
-    .select('id')
-    .single();
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ enqueued: true, task_id: data.id });
-});
-
-// ── Blog: blog-draft feed + schedule ─────────────────────────
-agent.get('/blog/feed', verifyAdmin, async (c) => {
-  const limit = Math.min(Number(c.req.query('limit')) || 30, 100);
-  const [actRes, apRes] = await Promise.all([
-    supabase()
-      .from('agent_actions')
-      .select('id, capability, status, ref_entity, details, created_at')
-      .eq('capability', 'blog-draft')
-      .order('created_at', { ascending: false })
-      .limit(limit),
-    supabase()
-      .from('agent_approvals')
-      .select('id, capability, status, what, proposal, evidence, confidence, created_at')
-      .eq('capability', 'blog-draft')
-      .in('status', ['pending', 'snoozed'])
-      .order('created_at', { ascending: false })
-      .limit(20),
-  ]);
-  return c.json({
-    executed:          actRes.data ?? [],
-    pending_approvals: apRes.data ?? [],
-  });
-});
-
-agent.post('/blog/schedule', verifyAdmin, async (c) => {
-  const body = await c.req.json<{
-    title: string; category?: string; data_points?: string[];
-  }>();
-  if (!body.title) return c.json({ error: 'title required' }, 400);
-  const { data, error } = await supabase()
-    .from('agent_tasks')
-    .insert({
-      capability: 'blog-draft',
-      input: {
-        title:           body.title,
-        category:        body.category    || 'Market Update',
-        past_top_posts:  [],
-        past_low_posts:  [],
-        data_points:     body.data_points || [],
-      },
-    })
-    .select('id')
-    .single();
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ enqueued: true, task_id: data.id });
 });

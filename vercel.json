@@ -1,14 +1,13 @@
 {
   "rewrites": [
-    { "source": "/health/:path*",    "destination": "/api/index" },
-    { "source": "/webhooks/:path*",  "destination": "/api/index" },
-    { "source": "/approvals/:path*", "destination": "/api/index" },
-    { "source": "/agent/:path*",     "destination": "/api/index" },
-    { "source": "/:path*",           "destination": "/api/index" }
+    { "source": "/(.*)", "destination": "/api/index" }
   ],
+  "env": {
+    "NODEJS_HELPERS": "0"
+  },
   "crons": [
     {
-      "path": "/agent/cron/tick?secret=__SET_CRON_SECRET_IN_VERCEL_ENV__&max=10",
+      "path": "/agent/cron/tick?secret=__SET_CRON_SECRET_IN_VERCEL_ENV__&max=5",
       "schedule": "0 6 * * *"
     }
   ]
