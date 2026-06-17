@@ -1,16 +1,20 @@
-// api/index.ts — Vercel serverless entrypoint.
-// Uses @hono/node-server's Vercel adapter, which writes to the Node (req,res)
-// signature Vercel's Node runtime expects. (hono/vercel is Edge-only and its
-// returned Response gets ignored on the Node runtime → 404.)
+// api/index.ts — Vercel serverless entrypoint (Node.js runtime).
 //
-// IMPORTANT: 'nodejs' is NOT a valid Vercel runtime value → it caused Vercel
-// to attempt an Edge compile, which fails because @hono/node-server imports
-// node:http. The function was never deployed → catch-all rewrite → 404.
-// Fixed: use 'nodejs20.x' (or omit config entirely — Node.js is the default).
+// WHY NOT `@hono/node-server/vercel`:
+//   That subpath may not be in the installed package's exports map, causing
+//   a silent build failure → function never deployed → catch-all rewrite → 404.
+//
+// WHY NOT `hono/vercel`:
+//   That adapter is Edge-only. It returns a Response object. Vercel's Node.js
+//   runtime expects the handler to write to (req, res) instead → 404.
+//
+// FIX: use `getRequestListener` from the main @hono/node-server export.
+//   It's always present, converts app.fetch to a Node.js (req,res) handler,
+//   and is exactly what the /vercel subpath wraps internally.
 
-import { handle } from '@hono/node-server/vercel';
+import { getRequestListener } from '@hono/node-server';
 import app from '../src/index.js';
 
-export const config = { runtime: 'nodejs20.x' };
+export const config = { runtime: 'nodejs' };
 
-export default handle(app);
+export default getRequestListener(app.fetch);
