@@ -144,8 +144,35 @@ Output JSON:
 
   async execute(_input, proposal): Promise<ExecuteResult> {
     const p = proposal as unknown as ProposalData;
-    // Real publish: hook into LinkedIn / Meta / TikTok APIs here once you have
-    // the tokens. For now, the draft is captured in agent_actions.
+    const text = p.hashtags.length ? `${p.body}\n\n${p.hashtags.map(h => `#${h}`).join(' ')}` : p.body;
+
+    // Real publish for the two channels with a working adapter + configured
+    // credentials. Others (Instagram/TikTok/X/Telegram/WhatsApp) stay drafts —
+    // no adapter built yet, or the content type (image/video) isn't produced here.
+    if (p.channel === 'linkedin' || p.channel === 'facebook') {
+      const { publishLinkedIn, publishFacebook } = await import('../channels/social.js');
+      const publish = p.channel === 'linkedin' ? publishLinkedIn : publishFacebook;
+      try {
+        const result = await publish(text);
+        return {
+          ok: true,
+          details: {
+            channel: p.channel,
+            language: p.language,
+            topic: p.topic,
+            full_body: p.body,
+            hashtags: p.hashtags,
+            suggested_publish_time_local: p.suggested_publish_time_local,
+            publish_status: 'published',
+            post_id: result.post_id,
+            post_url: result.post_url,
+          },
+        };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+
     return {
       ok: true,
       details: {
