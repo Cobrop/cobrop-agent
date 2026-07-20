@@ -26,21 +26,32 @@ export const fraudCheck: Capability<Input> = {
 
     const { data: prop, error } = await sb
       .from('properties')
-      .select('id, title, address, price, image_hashes, lat, lng, broker_id, profiles!properties_broker_id_fkey(handle, tier, strikes)')
+      .select('id, title, address, price, images, latitude, longitude, broker_id, city, property_type, bedrooms, profiles!properties_broker_id_fkey(full_name, subscription_level)')
       .eq('id', input.property_id)
       .single();
-    if (error || !prop) throw new Error(`Property ${input.property_id} not found`);
+    if (error || !prop) throw new Error(`Property ${input.property_id} not found: ${error?.message ?? 'no row'}`);
     trace.push({ state: 'done', title: `Property + broker loaded`, t: new Date().toISOString() });
 
-    // Find duplicate candidates — uses pgvector or a custom function. Stub:
-    // call your own RPC. Below assumes you've created an RPC named
-    // `find_dup_candidates(prop_id uuid)` returning {id, image_overlap, geo_distance_km, same_broker}.
-    const { data: candidates } = await sb.rpc('find_dup_candidates', { prop_id: input.property_id });
-    trace.push({ state: 'done', title: `Found ${candidates?.length ?? 0} candidate matches`, t: new Date().toISOString() });
+    // No image-hashing pipeline exists yet, so duplicate-image matching isn't
+    // available — this only judges on price deviation + text/address for now.
+    const candidates: Array<{ id: string; image_overlap: number; geo_distance_km: number; same_broker: boolean }> = [];
+    trace.push({ state: 'done', title: `Duplicate-image matching not wired — skipped`, t: new Date().toISOString() });
 
-    // Compute price deviation from neighborhood comparables (stub — wire to your real fn)
-    const { data: priceCmp } = await sb.rpc('price_vs_median', { prop_id: input.property_id });
-    const pricePct = priceCmp?.deviation_pct ?? 0;
+    // Price deviation from comparables (same type + city, ±1 bedroom) —
+    // computed inline, same approach as price-suggest.ts.
+    const cmpQuery = sb
+      .from('properties')
+      .select('price')
+      .eq('property_type', prop.property_type)
+      .eq('city', prop.city)
+      .neq('id', input.property_id)
+      .not('price', 'is', null);
+    if (prop.bedrooms != null) cmpQuery.gte('bedrooms', Math.max(0, prop.bedrooms - 1)).lte('bedrooms', prop.bedrooms + 1);
+    const { data: comps } = await cmpQuery.limit(40);
+    const prices = (comps ?? []).map(c => Number(c.price)).filter(p => !Number.isNaN(p) && p > 0).sort((a, b) => a - b);
+    const median = prices.length >= 3 ? prices[Math.floor(prices.length / 2)] : null;
+    const pricePct = median ? Math.round(((Number(prop.price) - median) / median) * 100) : 0;
+    trace.push({ state: 'done', title: `Price ${pricePct > 0 ? '+' : ''}${pricePct}% vs ${prices.length} comparables`, t: new Date().toISOString() });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const brokerProfile = (prop as any).profiles;
@@ -59,14 +70,14 @@ export const fraudCheck: Capability<Input> = {
           id: prop.id,
           title: prop.title,
           address: prop.address,
-          broker_handle: brokerProfile?.handle ?? 'unknown',
-          broker_strikes: brokerProfile?.strikes ?? 0,
-          broker_tier: brokerProfile?.tier ?? 'Free',
-          image_hashes: (prop.image_hashes as string[]) ?? [],
+          broker_handle: brokerProfile?.full_name ?? 'unknown',
+          broker_strikes: 0, // no strikes-tracking column exists yet
+          broker_tier: brokerProfile?.subscription_level ?? 'Free',
+          image_hashes: new Array((prop.images as string[] | null)?.length ?? 0).fill('unhashed'),
           price: prop.price,
           price_vs_median_pct: pricePct,
         },
-        candidates: (candidates ?? []) as Array<{ id: string; image_overlap: number; geo_distance_km: number; same_broker: boolean }>,
+        candidates,
       }),
       temperature: 0.1, // high stakes → deterministic
       maxTokens: 280,
@@ -105,9 +116,11 @@ export const fraudCheck: Capability<Input> = {
       return { ok: true, details: { decision: 'allow' } };
     }
     const newStatus = p.action === 'takedown' ? 'taken_down' : p.action === 'halt' ? 'on_hold' : 'flagged';
+    // fraud_check_at / fraud_verdict columns don't exist on properties — the
+    // verdict is captured in the agent_actions audit log by the caller instead.
     const { error } = await sb
       .from('properties')
-      .update({ status: newStatus, fraud_check_at: new Date().toISOString(), fraud_verdict: p.verdict })
+      .update({ status: newStatus })
       .eq('id', p.property_id);
     if (error) return { ok: false, error: error.message };
     return { ok: true, details: { new_status: newStatus, verdict: p.verdict } };

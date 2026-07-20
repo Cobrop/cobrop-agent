@@ -23,28 +23,39 @@ export const nudgeBroker: Capability<Input> = {
     const sb = supabase();
     const { data: broker } = await sb
       .from('profiles')
-      .select('id, handle, language')
+      .select('id, full_name, languages_spoken')
       .eq('id', input.broker_id)
       .single();
     if (!broker) throw new Error('Broker not found');
+    const brokerHandle = broker.full_name || broker.id;
+    const brokerLanguage = broker.languages_spoken?.[0] || 'English';
 
-    const { data: leads } = await sb
-      .from('inquiries')
-      .select('id, created_at, properties!inner(title, price)')
-      .eq('assigned_broker_id', input.broker_id)
-      .is('broker_replied_at', null)
-      .gt('created_at', new Date(Date.now() - 7 * 86400000).toISOString());
+    // No assigned_broker_id column on inquiries — leads are tied to a broker
+    // via the listing (properties.broker_id), so resolve their listings first.
+    const { data: brokerProps } = await sb
+      .from('properties')
+      .select('id, title, price')
+      .eq('broker_id', input.broker_id);
+    const propMap = new Map((brokerProps ?? []).map(p => [p.id, p]));
+
+    const { data: leads } = propMap.size > 0
+      ? await sb
+          .from('inquiries')
+          .select('id, property_id, created_at, status')
+          .in('property_id', [...propMap.keys()])
+          .neq('status', 'responded')
+          .gt('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
+      : { data: [] };
 
     const stale = (leads ?? []).map(l => {
       const hours = Math.floor((Date.now() - new Date(l.created_at).getTime()) / 3600000);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const prop = (l as any).properties;
-      return { id: l.id, hours_waiting: hours, property_title: prop.title, budget: prop.price };
+      const prop = propMap.get(l.property_id);
+      return { id: l.id, hours_waiting: hours, property_title: prop?.title ?? 'Unknown listing', budget: prop?.price };
     }).filter(l => l.hours_waiting >= 18);
 
     if (stale.length === 0) {
       return {
-        summary: `No nudge needed for @${broker.handle}`,
+        summary: `No nudge needed for @${brokerHandle}`,
         confidence: 1,
         risk: 'low',
         proposal: { broker_id: broker.id, in_app: '', whatsapp: '' },
@@ -61,8 +72,8 @@ export const nudgeBroker: Capability<Input> = {
     }>({
       system: SYSTEM_VOICE,
       prompt: nudgeBrokerPrompt({
-        broker_handle: broker.handle,
-        broker_language: broker.language || 'English',
+        broker_handle: brokerHandle,
+        broker_language: brokerLanguage,
         stale_leads: stale,
       }),
       temperature: 0.5,
@@ -70,7 +81,7 @@ export const nudgeBroker: Capability<Input> = {
     });
 
     return {
-      summary: `Nudge for @${broker.handle}: ${stale.length} stale leads`,
+      summary: `Nudge for @${brokerHandle}: ${stale.length} stale leads`,
       confidence: data.confidence,
       risk: 'low',
       proposal: {
