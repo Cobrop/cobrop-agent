@@ -6,8 +6,8 @@ on:
     - cron: '0 6 * * *'
     # Daily broker outreach at 06:30 UTC
     - cron: '30 6 * * *'
-    # Hourly broker nudges
-    - cron: '5 * * * *'
+    # Daily broker nudges at 06:45 UTC (was hourly — reduced to stop failure-email spam / stay within free-tier limits)
+    - cron: '45 6 * * *'
     # Weekly blog draft on Monday 07:00 UTC
     - cron: '0 7 * * 1'
     # Weekly re-learn from platform (Sunday 03:00 UTC, quiet hours)
@@ -25,7 +25,7 @@ jobs:
           case "${{ github.event.schedule }}" in
             "0 6 * * *")  echo "cap=price-suggest"   >> $GITHUB_OUTPUT ;;
             "30 6 * * *") echo "cap=broker-outreach" >> $GITHUB_OUTPUT ;;
-            "5 * * * *")  echo "cap=nudge-broker"    >> $GITHUB_OUTPUT ;;
+            "45 6 * * *") echo "cap=nudge-broker"    >> $GITHUB_OUTPUT ;;
             "0 7 * * 1")  echo "cap=blog-draft"      >> $GITHUB_OUTPUT ;;
             "0 3 * * 0")  echo "cap=learn"           >> $GITHUB_OUTPUT ;;
             *)            echo "cap=nudge-broker"    >> $GITHUB_OUTPUT ;;
