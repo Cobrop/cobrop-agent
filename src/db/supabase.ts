@@ -27,16 +27,20 @@ export async function loadAgentConfig(capability: string) {
 }
 
 export async function nextApprovalId(prefix: string): Promise<string> {
-  // Atomic-ish id generator: counts existing rows with this prefix today
-  const today = new Date().toISOString().slice(0, 10);
-  const { count } = await supabase()
+  // Human-readable running counter: RSK-0421 style. Scoped to "today" only
+  // used to reset to 0001 daily and collide with permanently-existing rows
+  // from prior days (unique constraint is on `id`, not per-day) — every
+  // price-suggest/social-post/blog-draft approval failed for two months
+  // because of this. Base it on the highest existing suffix instead.
+  const { data } = await supabase()
     .from('agent_approvals')
-    .select('id', { count: 'exact', head: true })
+    .select('id')
     .ilike('id', `${prefix}-%`)
-    .gte('created_at', today);
-  const next = (count ?? 0) + 1;
-  // Stable but human-readable: RSK-0421 style
-  return `${prefix}-${String(next).padStart(4, '0')}`;
+    .order('id', { ascending: false })
+    .limit(1);
+  const last = data?.[0]?.id as string | undefined;
+  const lastNum = last ? parseInt(last.slice(prefix.length + 1), 10) || 0 : 0;
+  return `${prefix}-${String(lastNum + 1).padStart(4, '0')}`;
 }
 
 export async function appendAction(row: {

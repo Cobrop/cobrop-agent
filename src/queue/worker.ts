@@ -142,6 +142,19 @@ async function runTask(task: AgentTask) {
       });
       if (error) {
         await failTask(task, `Approval insert failed: ${error.message}`);
+        // This branch was previously invisible in the admin console — only
+        // agent_tasks.error carried it, and nothing reads that table. Surface
+        // it in the audit log too so a broken approval-insert can't silently
+        // fail every run for weeks without showing up anywhere.
+        await appendAction({
+          task_id: task.id,
+          capability: task.capability,
+          autonomy: cfg.autonomy,
+          status: 'failed',
+          ref_entity: refEntityFor(task),
+          duration_ms: Date.now() - t0,
+          details: { error: `Approval insert failed: ${error.message}` },
+        });
         return;
       }
       // Don't audit-log here — that happens when the admin approves/rejects
