@@ -96,7 +96,7 @@ export const nudgeBroker: Capability<Input> = {
       evidence: [
         { label: 'Stale leads', value: String(stale.length) },
         { label: 'Oldest lead', value: `${Math.max(...stale.map(s => s.hours_waiting))}h` },
-        { label: 'Channels', value: 'in-app + WhatsApp' },
+        { label: 'Channels', value: 'in-app (real) + WhatsApp (draft only)' },
       ],
     };
   },
@@ -105,11 +105,18 @@ export const nudgeBroker: Capability<Input> = {
     const p = proposal as unknown as ProposalData;
     if (!p.in_app) return { ok: true, details: { skipped: true } };
     const sb = supabase();
-    const { error } = await sb.from('notifications').insert([
-      { user_id: p.broker_id, channel: 'in_app', body: p.in_app, sender: 'agent' },
-      { user_id: p.broker_id, channel: 'whatsapp', body: p.whatsapp, sender: 'agent' },
-    ]);
+    // notifications has no channel/body/sender columns and there's no real
+    // WhatsApp delivery integration — write the real in-app notification
+    // (matches the shape leadRequestService.ts already uses) and keep the
+    // WhatsApp copy as a draft in the log until a channel adapter exists.
+    const { error } = await sb.from('notifications').insert([{
+      user_id: p.broker_id,
+      type: 'agent_nudge',
+      priority: 'medium',
+      title: 'Follow up on your leads',
+      message: p.in_app,
+    }]);
     if (error) return { ok: false, error: error.message };
-    return { ok: true, details: { messages_sent: 2 } };
+    return { ok: true, details: { messages_sent: 1, whatsapp_draft: p.whatsapp, whatsapp_status: 'drafted — send via configured channel adapter' } };
   },
 };
