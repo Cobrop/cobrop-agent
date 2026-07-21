@@ -2,6 +2,29 @@
 
 const { TASK_TYPES, ACTIVITY_SEED, APPROVALS, CAPABILITIES, TASK_MIX, REGIONS, SUGGESTED_BROKERS, KPIS } = window.CB_DATA;
 
+// Adapts a real broker_prospects row (live-console.jsx's engine.prospects)
+// into the same shape this screen's cards were built around, so real data
+// and the disconnected demo's SUGGESTED_BROKERS seed can share one layout.
+// _raw carries the original row through for recruitProspect().
+function prospectToCard(p) {
+  const parts = (p.full_name || "").trim().split(/\s+/);
+  const initials = ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase() || "?";
+  return {
+    id: p.id,
+    initials,
+    name: p.full_name,
+    location: p.location ? (p.country ? `${p.location}, ${p.country}` : p.location) : (p.country || "—"),
+    tenure: p.company || "—",
+    sourcedFrom: p.source,
+    score: p.fit_score ?? "—",
+    preview: p.notes || "No notes yet — ready to draft an outreach invite.",
+    tags: p.language ? [p.language] : [],
+    risk: "low",
+    status: "pending",
+    _raw: p,
+  };
+}
+
 // ────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────
@@ -260,9 +283,20 @@ function RegionsMap() {
 function MissionControl({ events, now }) {
   const engine = window.useAgentEngine();
   const approvals = engine?.approvals || APPROVALS;
-  // Generate broker outreach via claude (shared with Outreach screen)
+  // Real prospects (broker_prospects table) when connected live; the fake
+  // seed list only when there's no engine at all (disconnected demo).
+  // Deliberately does NOT fall back to fake data just because the real
+  // list is empty — an empty state is honest, fake brokers aren't.
+  const liveProspects = engine?.prospects;
+  const brokers = liveProspects ? liveProspects.map(prospectToCard) : SUGGESTED_BROKERS;
   const openBrokerOutreach = (b) => {
     if (!engine) return;
+    if (b._raw && engine.recruitProspect) {
+      engine.recruitProspect(b._raw);
+      return;
+    }
+    // Disconnected-demo fallback only — real recruitment goes through
+    // broker-recruit.ts via recruitProspect() above, not a raw LLM prompt.
     const lang = b.tags && b.tags[0] || "English";
     const prompt = `You are CoBrop's broker outreach agent. CoBrop is a real-estate co-brokerage platform helping brokers across East Africa + Arab Gulf split fees on cross-border deals.
 
@@ -408,10 +442,15 @@ Output ONLY the message body.`;
               <span className="icon"><Icon.Sparkles size={13} /></span>
               Agent drafts · next moves
             </div>
-            <span className="card__sub">3 ready to send</span>
+            <span className="card__sub">{brokers.length} ready to draft</span>
           </div>
           <div className="card__body" style={{ gap: 10 }}>
-            {SUGGESTED_BROKERS.map(b => (
+            {liveProspects && brokers.length === 0 && (
+              <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--cb-ink-3)", fontSize: 12 }}>
+                No prospects yet. Add one via <span style={{ fontFamily: "var(--font-mono)" }}>POST /agent/prospects</span> to start drafting invites.
+              </div>
+            )}
+            {brokers.map(b => (
               <div key={b.id} className="suggested-outreach" style={{ border: "1px solid var(--cb-line)", padding: 12, cursor: "pointer" }} onClick={() => openBrokerOutreach(b)}>
                 <div className="suggested-outreach__head">
                   <div className="broker-avatar" style={{ width: 32, height: 32, fontSize: 11 }}>{b.initials}</div>
@@ -650,9 +689,18 @@ function ApprovalDetail({ item, now, engine }) {
 
 function OutreachScreen({ now }) {
   const engine = window.useAgentEngine && window.useAgentEngine();
-  // Generate a live outreach message for a broker via claude
+  // Real prospects when connected live — see prospectToCard() above.
+  // NOTE: the region funnel below (sourced/contacted/responded/onboarded/
+  // listed, per-country breakdown) is still demo seed data (REGIONS) —
+  // there's no per-region rollup of broker_prospects on the backend yet.
+  const liveProspects = engine?.prospects;
+  const brokers = liveProspects ? liveProspects.map(prospectToCard) : SUGGESTED_BROKERS;
   const openBrokerOutreach = (b) => {
     if (!engine) return;
+    if (b._raw && engine.recruitProspect) {
+      engine.recruitProspect(b._raw);
+      return;
+    }
     const lang = b.tags && b.tags[0] || "English";
     const prompt = `You are CoBrop's broker outreach agent. CoBrop is a real-estate co-brokerage platform helping brokers across Ethiopia, Kenya, UAE, Rwanda, South Africa, Tanzania, Uganda, Qatar split fees on cross-border deals.
 
@@ -790,11 +838,16 @@ Output ONLY the message body. No preface.`;
                 <span className="icon"><Icon.Send size={13} /></span>
                 Agent-drafted outreach
               </div>
-              <span className="chip is-warn">2 pending</span>
-              <span className="chip is-success">1 auto-sent</span>
+              <span className="chip is-warn">{brokers.length} {liveProspects ? "new" : "pending"}</span>
+              {!liveProspects && <span className="chip is-success">1 auto-sent</span>}
             </div>
             <div className="card__body is-flush" style={{ maxHeight: 320, overflowY: "auto" }}>
-              {SUGGESTED_BROKERS.map(b => (
+              {liveProspects && brokers.length === 0 && (
+                <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--cb-ink-3)", fontSize: 12 }}>
+                  No prospects yet. Add one via <span style={{ fontFamily: "var(--font-mono)" }}>POST /agent/prospects</span>.
+                </div>
+              )}
+              {brokers.map(b => (
                 <div key={b.id} className="broker-card" style={{ cursor: "pointer" }} onClick={() => openBrokerOutreach(b)}>
                   <div className="broker-avatar">{b.initials}</div>
                   <div style={{ minWidth: 0 }}>

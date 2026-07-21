@@ -160,3 +160,34 @@ agent.get('/activity', verifyAdmin, async (c) => {
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ events: data });
 });
+
+// ── Broker recruitment: prospects (brokers not yet on CoBrop) ────
+//
+// No sourcing pipeline exists — no scraping, no LinkedIn Search API,
+// no purchased list. Rows are added here manually (console form, or
+// direct calls) and the agent only ever drafts/sends to what's added;
+// it never invents or looks up prospects itself.
+agent.get('/prospects', verifyAdmin, async (c) => {
+  const status = c.req.query('status');
+  let q = supabase().from('broker_prospects').select('*').order('created_at', { ascending: false });
+  if (status) q = q.eq('status', status);
+  const { data, error } = await q;
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ prospects: data });
+});
+
+agent.post('/prospects', verifyAdmin, async (c) => {
+  const body = await c.req.json<{
+    full_name: string; company?: string; location?: string; country?: string;
+    email?: string; linkedin_url?: string; phone?: string; language?: string;
+    source?: string; notes?: string; fit_score?: number;
+  }>();
+  if (!body.full_name) return c.json({ error: 'full_name required' }, 400);
+  const { data, error } = await supabase()
+    .from('broker_prospects')
+    .insert({ ...body, source: body.source || 'manual' })
+    .select('*')
+    .single();
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ prospect: data });
+});

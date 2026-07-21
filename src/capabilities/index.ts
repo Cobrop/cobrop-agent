@@ -10,6 +10,7 @@ import { brokerOutreach } from './broker-outreach.js';
 import { blogDraft } from './blog-draft.js';
 import { socialPost } from './social-post.js';
 import { nudgeBroker } from './nudge-broker.js';
+import { brokerRecruit } from './broker-recruit.js';
 
 const list: Capability<any>[] = [
   leadReply,
@@ -20,6 +21,7 @@ const list: Capability<any>[] = [
   blogDraft,
   socialPost,
   nudgeBroker,
+  brokerRecruit,
 ];
 
 const byName = new Map<CapabilityName, Capability>(list.map(c => [c.name, c]));

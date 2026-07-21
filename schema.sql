@@ -2,7 +2,7 @@
 -- CoBrop Agent · Postgres schema
 -- Run this in the Supabase SQL editor (or `psql -f schema.sql`).
 --
--- Adds 4 tables + RLS policies + a `platform_agent` role with
+-- Adds 5 tables + RLS policies + a `platform_agent` role with
 -- least-privilege access to your existing CoBrop tables.
 -- ══════════════════════════════════════════════════════════════════════
 
@@ -102,8 +102,38 @@ insert into agent_config (capability, autonomy) values
   ('broker-outreach',  'assist'),
   ('blog-draft',       'assist'),
   ('social-post',      'assist'),
-  ('nudge-broker',     'autopilot')
+  ('nudge-broker',     'autopilot'),
+  ('broker-recruit',   'approve')
 on conflict (capability) do nothing;
+
+-- ── 5. Broker prospects — cold-outreach recruitment ──────────────
+-- Candidate brokers not yet on CoBrop. No scraping/sourcing pipeline
+-- exists — rows are added manually (admin console / API) until a real
+-- sourcing integration is built. The agent drafts personalized invites
+-- from this data; it never invents prospects itself.
+create table if not exists broker_prospects (
+  id            uuid primary key default gen_random_uuid(),
+  full_name     text not null,
+  company       text,
+  location      text,                                 -- city
+  country       text,
+  email         text,
+  linkedin_url  text,
+  phone         text,
+  language      text not null default 'English',
+  source        text not null default 'manual',       -- how this lead was found
+  notes         text,
+  fit_score     int,                                   -- 0-100, optional
+  status        text not null default 'new'
+                check (status in ('new','contacted','responded','onboarded','declined')),
+  added_by      text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  contacted_at  timestamptz
+);
+
+create index if not exists broker_prospects_status_idx
+  on broker_prospects (status, created_at desc);
 
 -- ══════════════════════════════════════════════════════════════════════
 -- Row-Level Security · enforce least-privilege for the agent
@@ -119,10 +149,11 @@ do $$ begin
 end $$;
 
 -- Enable RLS on every agent table
-alter table agent_tasks      enable row level security;
-alter table agent_approvals  enable row level security;
-alter table agent_actions    enable row level security;
-alter table agent_config     enable row level security;
+alter table agent_tasks       enable row level security;
+alter table agent_approvals   enable row level security;
+alter table agent_actions     enable row level security;
+alter table agent_config      enable row level security;
+alter table broker_prospects  enable row level security;
 
 -- Service-role bypasses RLS, but if you instead issue scoped JWTs
 -- with role = 'platform_agent', the following policies apply:
@@ -166,6 +197,17 @@ create policy if not exists "agent_config_read_for_agent"
   on agent_config for select
   to platform_agent
   using (true);
+
+create policy if not exists "broker_prospects_full_for_agent"
+  on broker_prospects for all
+  to platform_agent
+  using (true) with check (true);
+
+create policy if not exists "broker_prospects_admin_all"
+  on broker_prospects for all
+  to authenticated
+  using (auth.jwt() ->> 'role' = 'admin')
+  with check (auth.jwt() ->> 'role' = 'admin');
 
 -- ══════════════════════════════════════════════════════════════════════
 -- Hardening · what the agent must NEVER do on existing CoBrop tables

@@ -13,7 +13,8 @@ export type CapabilityName =
   | 'broker-outreach'
   | 'blog-draft'
   | 'social-post'
-  | 'nudge-broker';
+  | 'nudge-broker'
+  | 'broker-recruit';
 
 export interface AgentTask<T = Record<string, unknown>> {
   id: string;

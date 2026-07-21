@@ -43,6 +43,10 @@ function makeLiveApi(cfg) {
     blogSchedule:     (body)               => call('/agent/run', { method: 'POST', body: JSON.stringify({ capability: 'blog-draft', input: body }) }),
     // Manual run
     run:              (capability, input)   => call('/agent/run', { method: 'POST', body: JSON.stringify({ capability, input }) }),
+    // Broker recruitment — real prospects (broker_prospects table), added
+    // manually since no sourcing pipeline exists (no scraping/purchased list).
+    prospects:        (status = 'new')      => call(`/agent/prospects?status=${status}`),
+    addProspect:      (body)               => call('/agent/prospects', { method: 'POST', body: JSON.stringify(body) }),
   };
 }
 
@@ -197,6 +201,7 @@ function LiveAgentConsole({ cfg, onDisconnect }) {
   const [kpis,       setKpis]       = useState(null);
   const [marketingFeed, setMktFeed] = useState({ executed: [], pending_approvals: [] });
   const [blogFeed,   setBlogFeed]   = useState({ executed: [], pending_approvals: [] });
+  const [prospects,  setProspects]  = useState([]);
   const [paused,     setPaused]     = useState(false);
   const [now,        setNow]        = useState(Date.now());
   const [agentThinking, setAT]      = useState(false);
@@ -258,15 +263,20 @@ function LiveAgentConsole({ cfg, onDisconnect }) {
     try { setBlogFeed(await api.blogFeed()); } catch { }
   }, [api]);
 
+  const fetchProspects = useCallback(async () => {
+    try { const r = await api.prospects('new'); setProspects(r.prospects || []); } catch { }
+  }, [api]);
+
   useEffect(() => {
     fetchApprovals(); fetchActivity(); fetchKpis();
-    fetchMarketingFeed(); fetchBlogFeed();
-  }, [fetchApprovals, fetchActivity, fetchKpis, fetchMarketingFeed, fetchBlogFeed]);
+    fetchMarketingFeed(); fetchBlogFeed(); fetchProspects();
+  }, [fetchApprovals, fetchActivity, fetchKpis, fetchMarketingFeed, fetchBlogFeed, fetchProspects]);
 
   useEffect(() => { const id = setInterval(fetchApprovals,     8000); return () => clearInterval(id); }, [fetchApprovals]);
   useEffect(() => { const id = setInterval(fetchActivity,      5000); return () => clearInterval(id); }, [fetchActivity]);
   useEffect(() => { const id = setInterval(fetchKpis,         30000); return () => clearInterval(id); }, [fetchKpis]);
   useEffect(() => { const id = setInterval(fetchMarketingFeed,20000); return () => clearInterval(id); }, [fetchMarketingFeed]);
+  useEffect(() => { const id = setInterval(fetchProspects,    20000); return () => clearInterval(id); }, [fetchProspects]);
   useEffect(() => { const id = setInterval(fetchBlogFeed,     20000); return () => clearInterval(id); }, [fetchBlogFeed]);
 
   // Combined feed
@@ -477,6 +487,52 @@ Output ONLY the post body (no title, no headings, no meta).`;
     setDraftModal({ title, eyebrow, body, status: 'done', kind: kind || 'preview', badges });
   }, []);
 
+  // ── Broker recruitment: draft (and on approve, actually send) a cold
+  // outreach invite to a real prospect. Unlike blog/social there's no
+  // separate fast-preview call — the real broker-recruit capability run
+  // IS the draft, so the modal shows its output directly.
+  const recruitProspect = useCallback(async (prospect) => {
+    if (agentThinking) return;
+    setAT(true);
+    setDraftModal({ title: `Invite to ${prospect.full_name}`, eyebrow: prospect.company || prospect.location || '', body: '', status: 'thinking', kind: 'recruit' });
+    const thinkId = pushToast({ kind: 'thinking', title: 'Drafting invite…', msg: prospect.full_name });
+    try {
+      const r = await api.run('broker-recruit', { prospect_id: prospect.id });
+      if (r.status === 'pending' && r.approvalId) {
+        const approvalsResp = await api.approvals('pending');
+        const found = (approvalsResp.approvals || []).find(a => a.id === r.approvalId);
+        let body = r.summary || '';
+        try {
+          const p = typeof found?.proposal === 'string' ? JSON.parse(found.proposal) : found?.proposal;
+          body = p?.message || body;
+        } catch { /* keep summary fallback */ }
+        setDraftModal(d => d ? { ...d, body, status: 'done', publish: { state: 'ready', approvalId: r.approvalId } } : null);
+        fetchApprovals();
+      } else if (r.status === 'auto-completed') {
+        setDraftModal(d => d ? { ...d, body: r.summary || 'Sent.', status: 'done', publish: { state: 'published' } } : null);
+        fetchActivity();
+      } else {
+        setDraftModal(d => d ? { ...d, status: 'error', body: r.error || 'Could not draft invite' } : null);
+      }
+      dismissToast(thinkId);
+      pushToast({ kind: r.status === 'failed' ? 'error' : 'success', title: r.status === 'failed' ? 'Failed' : 'Draft ready', msg: prospect.full_name });
+    } catch (e) {
+      setDraftModal(d => d ? { ...d, status: 'error', body: e.message } : null);
+      dismissToast(thinkId);
+      pushToast({ kind: 'error', title: 'Draft failed', msg: e.message });
+    } finally { setAT(false); }
+  }, [agentThinking, api, pushToast, dismissToast, fetchApprovals, fetchActivity]);
+
+  const addProspect = useCallback(async (body) => {
+    try {
+      await api.addProspect(body);
+      pushToast({ kind: 'success', title: 'Prospect added', msg: body.full_name });
+      fetchProspects();
+    } catch (e) {
+      pushToast({ kind: 'error', title: 'Could not add prospect', msg: e.message });
+    }
+  }, [api, pushToast, fetchProspects]);
+
   // ── Engine context (all screens read this) ────────────────────────
   const engine = {
     approvals, events: allEvents, now,
@@ -491,6 +547,8 @@ Output ONLY the post body (no title, no headings, no meta).`;
     // Schedule helpers (for screens to call directly)
     scheduleMarketingPost: (body) => api.marketingSchedule(body).then(fetchMarketingFeed).catch(e => pushToast({ kind: 'error', title: 'Schedule failed', msg: e.message })),
     scheduleBlogDraft:     (body) => api.blogSchedule(body).then(fetchBlogFeed).catch(e => pushToast({ kind: 'error', title: 'Schedule failed', msg: e.message })),
+    // Broker recruitment — real prospects, no fake seed data
+    prospects, recruitProspect, addProspect,
   };
 
   const screenMap = {

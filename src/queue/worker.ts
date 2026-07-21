@@ -234,6 +234,7 @@ function prefixFor(capability: string): string {
     'blog-draft':      'BLOG',
     'social-post':     'MKT',
     'nudge-broker':    'NU',
+    'broker-recruit':  'REC',
   }[capability] ?? 'EV';
 }
 
@@ -248,6 +249,7 @@ function slaForCapability(capability: string, risk: string): number {
     'listing-onboard': 12 * 60 * 60 * 1000,      // 12h
     'lead-reply':      30 * 60 * 1000,           // 30m (very tight)
     'nudge-broker':    24 * 60 * 60 * 1000,
+    'broker-recruit':  24 * 60 * 60 * 1000,       // first contact — worth a careful look
   }[capability] ?? 4 * 60 * 60 * 1000;
   // Compress high-risk windows
   return risk === 'high' ? Math.min(base, 60 * 60 * 1000) : base;
@@ -258,6 +260,7 @@ function refEntityFor(task: AgentTask): string | undefined {
   if (typeof i.property_id === 'string') return `property:${i.property_id}`;
   if (typeof i.inquiry_id === 'string')  return `inquiry:${i.inquiry_id}`;
   if (typeof i.broker_id === 'string')   return `broker:${i.broker_id}`;
+  if (typeof i.prospect_id === 'string') return `prospect:${i.prospect_id}`;
   return undefined;
 }
 

@@ -35,6 +35,11 @@ const Env = z.object({
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
 
+  // Email — Resend (free tier, no OAuth/app-review, unlike LinkedIn/WhatsApp)
+  // https://resend.com/api-keys
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM: z.string().optional(), // e.g. "CoBrop <hello@cobrop.com>" — needs a verified domain
+
   // Queue
   QUEUE_POLL_MS: z.coerce.number().default(5000),
   QUEUE_CONCURRENCY: z.coerce.number().default(3),
