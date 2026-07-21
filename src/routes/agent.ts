@@ -38,19 +38,47 @@ agent.post('/draft', verifyAdmin, async (c) => {
 });
 
 // ── Manually enqueue any capability ──────────────────────────────
+//
+// Admin-triggered runs are interactive (console "draft" buttons) —
+// process immediately via runTask() instead of leaving it for the next
+// scheduled cron tick, which could be up to 24h away.
 agent.post('/run', verifyAdmin, async (c) => {
   const body = await c.req.json<{ capability: CapabilityName; input: Record<string, unknown> }>();
   if (!listCapabilities().includes(body.capability)) {
     return c.json({ error: 'unknown capability' }, 400);
   }
-  const { data, error } = await supabase()
+  const { data: task, error } = await supabase()
     .from('agent_tasks')
     .insert({ capability: body.capability, input: body.input })
-    .select('id')
+    .select('*')
     .single();
   if (error) return c.json({ error: error.message }, 500);
-  return c.json({ enqueued: true, task_id: data.id });
+
+  const { runTask } = await import('../queue/worker.js');
+  const result = await runTask(task);
+  return c.json({ enqueued: true, task_id: task.id, ...result });
 });
+
+// ── Feed for a capability: recent executed actions + pending approvals ──
+async function capabilityFeed(capability: string) {
+  const { data: executed } = await supabase()
+    .from('agent_actions')
+    .select('id, status, ref_entity, duration_ms, details, created_at')
+    .eq('capability', capability)
+    .in('status', ['approved-executed', 'auto-completed'])
+    .order('created_at', { ascending: false })
+    .limit(20);
+  const { data: pending } = await supabase()
+    .from('agent_approvals')
+    .select('*')
+    .eq('capability', capability)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  return { executed: executed ?? [], pending_approvals: pending ?? [] };
+}
+
+agent.get('/blog/feed', verifyAdmin, async (c) => c.json(await capabilityFeed('blog-draft')));
+agent.get('/marketing/feed', verifyAdmin, async (c) => c.json(await capabilityFeed('social-post')));
 
 // ── Cron-triggered batch runs (called by GitHub Actions or Vercel cron) ──
 //

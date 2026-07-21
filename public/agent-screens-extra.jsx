@@ -89,10 +89,17 @@ Brand voice rules: confident, educational, empowering. Use action verbs. NO mark
 
 Output ONLY the post body. No preface, no commentary.`;
 
+    // Map the screen's short channel keys to what social-post.ts's Channel
+    // type actually accepts — previously this was guessed by parsing the
+    // display eyebrow text ("LinkedIn · KE"), which never produced a valid
+    // channel string, so real scheduling silently never fired.
+    const CHANNEL_KEY_MAP = { li: "linkedin", fb: "facebook", ig: "instagram", tt: "tiktok", x: "x", tg: "telegram", wa: "whatsapp" };
     engine.generateAndPreview({
       title: s.title,
       eyebrow: ch.name + " · " + s.locale,
       kind: "post",
+      channel: CHANNEL_KEY_MAP[s.ch],
+      topicSub: s.sub,
       prompt,
       badges: [
         { label: s.day + " " + s.time, cls: "" },

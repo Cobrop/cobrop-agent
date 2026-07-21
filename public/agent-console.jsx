@@ -397,7 +397,7 @@ Output ONLY the post body (no title, no headings, no meta).`;
         </TweaksPanel>
 
         <ToastTray toasts={toasts} />
-        {draftModal && <DraftModal modal={draftModal} onClose={() => setDraftModal(null)} />}
+        {draftModal && <DraftModal modal={draftModal} engine={engine} onClose={() => setDraftModal(null)} />}
       </div>
     </AgentEngineContext.Provider>
   );
@@ -407,7 +407,41 @@ Output ONLY the post body (no title, no headings, no meta).`;
 // Live blog draft modal
 // ─────────────────────────────────────────────────────────────
 
-function DraftModal({ modal, onClose }) {
+// The old "Approve & send"/"Publish" button had no onClick at all — clicking
+// it did nothing. modal.publish (set by live-console.jsx as the real
+// blog-draft/social-post capability runs in the background after the fast
+// preview text) drives what this actually does now:
+//   undefined   — no live engine wiring (the disconnected desktop demo)
+//   preparing   — real capability task is running server-side
+//   ready       — a real pending approval exists; click = engine.approve(id)
+//   published   — capability auto-executed already, nothing left to click
+//   error       — the real run failed; show why instead of a dead button
+function PublishButton({ modal, isBlog, engine, onClose }) {
+  const label = isBlog ? "Approve & publish" : "Approve & send";
+  const pub = modal.publish;
+  if (!pub || modal.status !== "done") {
+    return <button className="btn is-sm is-success" disabled><Icon.CheckCircle size={11} /> {isBlog ? "Publish" : "Approve & send"}</button>;
+  }
+  if (pub.state === "preparing") {
+    return <button className="btn is-sm is-success" disabled><span className="toast__spinner" style={{ width: 10, height: 10 }}></span> Preparing…</button>;
+  }
+  if (pub.state === "published") {
+    return <button className="btn is-sm is-success" disabled><Icon.CheckCircle size={11} /> Published</button>;
+  }
+  if (pub.state === "error") {
+    return <button className="btn is-sm is-danger" disabled title={pub.message}><Icon.AlertTriangle size={11} /> {pub.message ? pub.message.slice(0, 40) : "Failed"}</button>;
+  }
+  if (pub.state === "ready" && pub.approvalId) {
+    return (
+      <button className="btn is-sm is-success" onClick={() => engine?.approve(pub.approvalId).then(onClose)}>
+        <Icon.CheckCircle size={11} /> {label}
+      </button>
+    );
+  }
+  return <button className="btn is-sm is-success" disabled><Icon.CheckCircle size={11} /> {isBlog ? "Publish" : "Approve & send"}</button>;
+}
+
+function DraftModal({ modal, onClose, engine }) {
   const isBlog = modal.kind === "blog";
   return (
     <div className="draft-overlay" onClick={onClose}>
@@ -453,11 +487,11 @@ function DraftModal({ modal, onClose }) {
           )}
         </div>
         <div className="draft-modal__foot">
-          <span className="chip is-cyan"><Icon.Zap size={11} /> live · claude-haiku-4-5</span>
+          <span className="chip is-cyan"><Icon.Zap size={11} /> live · Groq / Gemini</span>
           <span className="chip"><Icon.Type size={11} /> brand voice loaded</span>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
             <button className="btn is-sm"><Icon.Pencil size={11} /> Edit</button>
-            <button className="btn is-sm is-success" disabled={modal.status !== "done"}><Icon.CheckCircle size={11} /> {isBlog ? "Publish" : "Approve & send"}</button>
+            <PublishButton modal={modal} isBlog={isBlog} engine={engine} onClose={onClose} />
             <button className="btn is-sm is-ghost" onClick={onClose}>Close</button>
           </div>
         </div>

@@ -85,13 +85,20 @@ async function claimNextTask(): Promise<AgentTask | null> {
   return data as AgentTask | null;
 }
 
+export interface RunTaskResult {
+  status: 'auto-completed' | 'pending' | 'blocked' | 'failed';
+  summary?: string;
+  approvalId?: string;
+  error?: string;
+}
+
 // ── Run a single task end-to-end ─────────────────────────────────
-async function runTask(task: AgentTask) {
+export async function runTask(task: AgentTask): Promise<RunTaskResult> {
   const t0 = Date.now();
   const cap = getCapability(task.capability);
   if (!cap) {
     await failTask(task, `Unknown capability: ${task.capability}`);
-    return;
+    return { status: 'failed', error: `Unknown capability: ${task.capability}` };
   }
   const cfg = await loadAgentConfig(task.capability);
   console.log(`[task ${task.id.slice(0, 8)}] ${task.capability} · autonomy=${cfg.autonomy}`);
@@ -106,7 +113,7 @@ async function runTask(task: AgentTask) {
       const exec = await cap.execute(task.input, result.proposal);
       if (!exec.ok) {
         await failTask(task, `Execute failed: ${exec.error}`);
-        return;
+        return { status: 'failed', error: exec.error };
       }
       await appendAction({
         task_id: task.id,
@@ -119,7 +126,7 @@ async function runTask(task: AgentTask) {
       });
       await finishTask(task, { summary: result.summary, executed: true, ...exec.details });
       console.log(`  ✓ auto-completed: ${result.summary}`);
-      return;
+      return { status: 'auto-completed', summary: result.summary };
     }
 
     if (routing === 'pending') {
@@ -155,12 +162,12 @@ async function runTask(task: AgentTask) {
           duration_ms: Date.now() - t0,
           details: { error: `Approval insert failed: ${error.message}` },
         });
-        return;
+        return { status: 'failed', error: `Approval insert failed: ${error.message}` };
       }
       // Don't audit-log here — that happens when the admin approves/rejects
       await finishTask(task, { summary: result.summary, queued_approval: approvalId });
       console.log(`  → queued for approval: ${approvalId} (${explainRouting(cfg.autonomy, result.risk, 'pending')})`);
-      return;
+      return { status: 'pending', summary: result.summary, approvalId };
     }
 
     // blocked
@@ -175,6 +182,7 @@ async function runTask(task: AgentTask) {
     });
     await finishTask(task, { blocked: true });
     console.log(`  · blocked (autonomy off)`);
+    return { status: 'blocked' };
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -189,6 +197,7 @@ async function runTask(task: AgentTask) {
       duration_ms: Date.now() - t0,
       details: { error: msg },
     });
+    return { status: 'failed', error: msg };
   }
 }
 

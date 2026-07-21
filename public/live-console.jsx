@@ -32,12 +32,15 @@ function makeLiveApi(cfg) {
     kpis:             ()                    => call('/agent/kpis'),
     // AI draft — calls Groq/Gemini on your backend (no Claude API key needed)
     draft:            (prompt, system)      => call('/agent/draft', { method: 'POST', body: JSON.stringify({ prompt, system, max_tokens: 1200, temperature: 0.4 }) }),
-    // Marketing
+    // Marketing — /agent/marketing/schedule and /agent/blog/schedule never
+    // existed (confirmed 404 in production); both draft flows silently
+    // failed to create a real, approvable task. /agent/run already does
+    // exactly this (enqueue + process immediately) for any capability.
     marketingFeed:    ()                    => call('/agent/marketing/feed'),
-    marketingSchedule:(body)               => call('/agent/marketing/schedule', { method: 'POST', body: JSON.stringify(body) }),
+    marketingSchedule:(body)               => call('/agent/run', { method: 'POST', body: JSON.stringify({ capability: 'social-post', input: body }) }),
     // Blog
     blogFeed:         ()                    => call('/agent/blog/feed'),
-    blogSchedule:     (body)               => call('/agent/blog/schedule', { method: 'POST', body: JSON.stringify(body) }),
+    blogSchedule:     (body)               => call('/agent/run', { method: 'POST', body: JSON.stringify({ capability: 'blog-draft', input: body }) }),
     // Manual run
     run:              (capability, input)   => call('/agent/run', { method: 'POST', body: JSON.stringify({ capability, input }) }),
   };
@@ -382,6 +385,30 @@ Output ONLY this JSON (no markdown, no explanation):
     } finally { setAT(false); }
   }, [agentThinking, agentDraft, t.autonomy, pushToast, dismissToast, pushEvent, fetchApprovals]);
 
+  // Kicks off the real capability run (blog-draft / social-post) once the
+  // fast preview text is showing, and sets modal.publish so the Publish
+  // button reflects what actually happened — auto-published, ready to
+  // approve, or failed — instead of the old dead button that did nothing
+  // because /agent/blog/schedule and /agent/marketing/schedule never
+  // existed (confirmed 404) and nothing was ever wired to click anyway.
+  const preparePublish = useCallback(async (scheduleCall) => {
+    setDraftModal(d => d ? { ...d, publish: { state: 'preparing' } } : null);
+    try {
+      const r = await scheduleCall();
+      if (r.status === 'auto-completed') {
+        setDraftModal(d => d ? { ...d, publish: { state: 'published' } } : null);
+        fetchActivity();
+      } else if (r.status === 'pending' && r.approvalId) {
+        setDraftModal(d => d ? { ...d, publish: { state: 'ready', approvalId: r.approvalId } } : null);
+        fetchApprovals();
+      } else {
+        setDraftModal(d => d ? { ...d, publish: { state: 'error', message: r.error || 'Could not prepare for publish' } } : null);
+      }
+    } catch (e) {
+      setDraftModal(d => d ? { ...d, publish: { state: 'error', message: e.message } } : null);
+    }
+  }, [fetchActivity, fetchApprovals]);
+
   // ── AI: draft blog post via YOUR backend ──────────────────────────
   const draftBlogPost = useCallback(async ({ title, category }) => {
     if (agentThinking) return;
@@ -406,17 +433,19 @@ Output ONLY the post body (no title, no headings, no meta).`;
         title: `Drafted blog post · ${title}`,
         meta: `${category} · ~${text.split(/\s+/).length} words · awaiting review`,
       });
-      // Also enqueue in backend queue so it goes through approval flow
-      api.blogSchedule({ title, category }).catch(() => {});
+      // Run the real blog-draft capability (full structured draft, not the
+      // 4-paragraph preview above) so the Publish button has something real
+      // to approve.
+      preparePublish(() => api.blogSchedule({ title, category }));
     } catch (e) {
       setDraftModal(d => d ? { ...d, status: 'error', body: e.message } : null);
       dismissToast(thinkId);
       pushToast({ kind: 'error', title: 'Draft failed', msg: e.message });
     } finally { setAT(false); }
-  }, [agentThinking, agentDraft, pushToast, dismissToast, pushEvent, api]);
+  }, [agentThinking, agentDraft, pushToast, dismissToast, pushEvent, api, preparePublish]);
 
   // ── AI: generic generate + preview via YOUR backend ───────────────
-  const generateAndPreview = useCallback(async ({ title, eyebrow, kind, prompt, badges }) => {
+  const generateAndPreview = useCallback(async ({ title, eyebrow, kind, channel, topicSub, prompt, badges }) => {
     if (agentThinking) return;
     setAT(true);
     setDraftModal({ title, eyebrow, body: '', status: 'thinking', kind, badges });
@@ -426,21 +455,23 @@ Output ONLY the post body (no title, no headings, no meta).`;
       setDraftModal(d => d ? { ...d, body: text.trim(), status: 'done' } : null);
       dismissToast(thinkId);
       pushToast({ kind: 'success', title: 'Draft ready', msg: title.slice(0, 50) });
-      // Schedule as real backend task if it's a social post
-      if (kind === 'social' && eyebrow) {
-        const parts = title.split(' · ');
-        api.marketingSchedule({
-          channel:   (eyebrow || 'linkedin').toLowerCase().replace(/\s+/g, ''),
-          topic:     parts[0] || title,
-          topic_sub: parts[1] || '',
-        }).catch(() => {});
+      // Schedule as a real backend task for social posts. Needs an explicit
+      // channel (linkedin/facebook/instagram/etc.) — social-post.ts rejects
+      // anything else, and eyebrow is a display string ("LinkedIn · KE"),
+      // not a valid channel value, so it can't be derived from that.
+      if ((kind === 'social' || kind === 'post') && channel) {
+        preparePublish(() => api.marketingSchedule({
+          channel,
+          topic:     title,
+          topic_sub: topicSub || '',
+        }));
       }
     } catch (e) {
       setDraftModal(d => d ? { ...d, status: 'error', body: e.message } : null);
       dismissToast(thinkId);
       pushToast({ kind: 'error', title: 'Draft failed', msg: e.message });
     } finally { setAT(false); }
-  }, [agentThinking, agentDraft, pushToast, dismissToast, api]);
+  }, [agentThinking, agentDraft, pushToast, dismissToast, api, preparePublish]);
 
   const previewContent = useCallback(({ title, eyebrow, body, kind, badges }) => {
     setDraftModal({ title, eyebrow, body, status: 'done', kind: kind || 'preview', badges });
@@ -541,7 +572,7 @@ Output ONLY the post body (no title, no headings, no meta).`;
         </TweaksPanel>
 
         <ToastTray toasts={toasts} />
-        {draftModal && <DraftModal modal={draftModal} onClose={() => setDraftModal(null)} />}
+        {draftModal && <DraftModal modal={draftModal} engine={engine} onClose={() => setDraftModal(null)} />}
       </div>
     </EngineCtx.Provider>
   );
