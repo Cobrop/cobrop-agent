@@ -17,8 +17,14 @@ export const resendWebhook = new Hono();
 function verifySvix(secret: string, id: string, timestamp: string, body: string, signatureHeader: string): boolean {
   const secretBytes = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
   const signedContent = `${id}.${timestamp}.${body}`;
-  const expected = crypto.createHmac('sha256', secretBytes).update(signedContent).digest('base64');
-  const expectedBuf = Buffer.from(expected);
+  // .digest() with no encoding arg returns the raw 32-byte HMAC — comparing
+  // this directly against the base64-decoded signature. The previous
+  // version used .digest('base64') (a 44-char STRING) then wrapped it in
+  // Buffer.from(expected) with no encoding, which treats it as raw
+  // UTF-8 text instead of decoding the base64 — 44 bytes vs the real
+  // signature's 32, so timingSafeEqual's length check always failed and
+  // every legitimate webhook would have been rejected as "invalid signature".
+  const expectedBuf = crypto.createHmac('sha256', secretBytes).update(signedContent).digest();
   // svix-signature is space-separated "v1,<base64>" entries — check all of them
   return signatureHeader.split(' ').some((part) => {
     const sig = part.split(',')[1];
