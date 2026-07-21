@@ -156,25 +156,34 @@ alter table agent_config      enable row level security;
 alter table broker_prospects  enable row level security;
 
 -- Service-role bypasses RLS, but if you instead issue scoped JWTs
--- with role = 'platform_agent', the following policies apply:
+-- with role = 'platform_agent', the following policies apply.
+--
+-- CREATE POLICY has no IF NOT EXISTS in Postgres (unlike CREATE TABLE/
+-- INDEX) — this file used to have it everywhere below, which is a hard
+-- syntax error, not just a no-op. Made idempotent the correct way:
+-- drop-then-create.
 
-create policy if not exists "agent_tasks_full_for_agent"
+drop policy if exists "agent_tasks_full_for_agent" on agent_tasks;
+create policy "agent_tasks_full_for_agent"
   on agent_tasks for all
   to platform_agent
   using (true) with check (true);
 
-create policy if not exists "agent_approvals_rw_for_agent"
+drop policy if exists "agent_approvals_rw_for_agent" on agent_approvals;
+create policy "agent_approvals_rw_for_agent"
   on agent_approvals for all
   to platform_agent
   using (true) with check (true);
 
-create policy if not exists "agent_approvals_admin_decides"
+drop policy if exists "agent_approvals_admin_decides" on agent_approvals;
+create policy "agent_approvals_admin_decides"
   on agent_approvals for update
   to authenticated
   using (auth.jwt() ->> 'role' = 'admin')
   with check (auth.jwt() ->> 'role' = 'admin');
 
-create policy if not exists "agent_actions_append_only"
+drop policy if exists "agent_actions_append_only" on agent_actions;
+create policy "agent_actions_append_only"
   on agent_actions for insert
   to platform_agent
   with check (true);
@@ -182,28 +191,33 @@ create policy if not exists "agent_actions_append_only"
 -- Explicitly NO update/delete policy → append-only audit log
 -- (RLS denies by default; absence of policy = no access)
 
-create policy if not exists "agent_actions_admin_read"
+drop policy if exists "agent_actions_admin_read" on agent_actions;
+create policy "agent_actions_admin_read"
   on agent_actions for select
   to authenticated
   using (auth.jwt() ->> 'role' in ('admin','platform_agent'));
 
-create policy if not exists "agent_config_admin_only"
+drop policy if exists "agent_config_admin_only" on agent_config;
+create policy "agent_config_admin_only"
   on agent_config for all
   to authenticated
   using (auth.jwt() ->> 'role' = 'admin')
   with check (auth.jwt() ->> 'role' = 'admin');
 
-create policy if not exists "agent_config_read_for_agent"
+drop policy if exists "agent_config_read_for_agent" on agent_config;
+create policy "agent_config_read_for_agent"
   on agent_config for select
   to platform_agent
   using (true);
 
-create policy if not exists "broker_prospects_full_for_agent"
+drop policy if exists "broker_prospects_full_for_agent" on broker_prospects;
+create policy "broker_prospects_full_for_agent"
   on broker_prospects for all
   to platform_agent
   using (true) with check (true);
 
-create policy if not exists "broker_prospects_admin_all"
+drop policy if exists "broker_prospects_admin_all" on broker_prospects;
+create policy "broker_prospects_admin_all"
   on broker_prospects for all
   to authenticated
   using (auth.jwt() ->> 'role' = 'admin')
@@ -217,10 +231,12 @@ create policy if not exists "broker_prospects_admin_all"
 -- ══════════════════════════════════════════════════════════════════════
 
 -- Properties: READ all, WRITE only agent_status, description columns
-create policy if not exists "properties_agent_select"
+drop policy if exists "properties_agent_select" on properties;
+create policy "properties_agent_select"
   on properties for select to platform_agent using (true);
 
-create policy if not exists "properties_agent_update_safe_cols"
+drop policy if exists "properties_agent_update_safe_cols" on properties;
+create policy "properties_agent_update_safe_cols"
   on properties for update to platform_agent
   using (true)
   with check (true); -- column-level constraints enforced via grants below
@@ -231,17 +247,20 @@ grant  update (description, description_am, description_ar, description_fr,
    on properties to platform_agent;
 
 -- Profiles: READ ONLY (cannot modify roles, payment fields, auth)
-create policy if not exists "profiles_agent_select"
+drop policy if exists "profiles_agent_select" on profiles;
+create policy "profiles_agent_select"
   on profiles for select to platform_agent using (true);
 revoke insert, update, delete on profiles from platform_agent;
 
 -- Transactions: READ ONLY (cannot initiate, refund, modify)
-create policy if not exists "transactions_agent_select"
+drop policy if exists "transactions_agent_select" on transactions;
+create policy "transactions_agent_select"
   on transactions for select to platform_agent using (true);
 revoke insert, update, delete on transactions from platform_agent;
 
 -- Inquiries: full read, INSERT/UPDATE allowed (for auto-replies + routing)
-create policy if not exists "inquiries_agent_all"
+drop policy if exists "inquiries_agent_all" on inquiries;
+create policy "inquiries_agent_all"
   on inquiries for all to platform_agent using (true) with check (true);
 revoke delete on inquiries from platform_agent; -- never delete an inquiry
 
