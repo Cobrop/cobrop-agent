@@ -43,6 +43,19 @@ export async function nextApprovalId(prefix: string): Promise<string> {
   return `${prefix}-${String(lastNum + 1).padStart(4, '0')}`;
 }
 
+/** Upload an agent-generated image (social posts, etc.) to the public
+ * agent-media bucket and return its public URL. */
+export async function uploadAgentImage(buffer: Buffer, path: string): Promise<string> {
+  const sb = supabase();
+  const { error } = await sb.storage.from('agent-media').upload(path, buffer, {
+    contentType: 'image/jpeg',
+    upsert: true,
+  });
+  if (error) throw new Error(`Image upload failed: ${error.message}`);
+  const { data } = sb.storage.from('agent-media').getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export async function appendAction(row: {
   task_id?: string;
   approval_id?: string;

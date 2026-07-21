@@ -31,6 +31,8 @@ interface ProposalData {
   hashtags: string[];
   suggested_publish_time_local: string;
   topic: string;
+  /** Only populated for image-required channels (currently instagram) */
+  image_url?: string;
 }
 
 const channelRules: Record<Channel, string> = {
@@ -97,13 +99,14 @@ TOPIC: ${input.topic}${input.topic_sub ? ' — ' + input.topic_sub : ''}
 ${propertyContext}
 
 Write in ${language}. Be specific (use a real CoBrop capability, a real number, or a real broker scenario — don't invent generic content). Match the channel rules exactly.
+${input.channel === 'instagram' ? '\nAlso write an image_prompt: a short visual description (no text/words in the image) for a photorealistic marketing graphic matching this post — property exterior/interior shots, broker-at-work scenes, or clean abstract real-estate visuals work well.' : ''}
 
 Output JSON:
 {
   "body": "<the post body — plain text>",
   "hashtags": ["<tag>", "..."],
   "suggested_publish_time_local": "<HH:MM>",
-  "risk": "<low|med|high>",
+  ${input.channel === 'instagram' ? '"image_prompt": "<visual description for the marketing image>",\n  ' : ''}"risk": "<low|med|high>",
   "confidence": <0-1>
 }`;
 
@@ -111,10 +114,20 @@ Output JSON:
       body: string;
       hashtags: string[];
       suggested_publish_time_local: string;
+      image_prompt?: string;
       risk: 'low' | 'med' | 'high';
       confidence: number;
     }>({ system, prompt, temperature: 0.7, maxTokens: 700 });
     trace.push({ state: 'done', title: `Drafted ${input.channel} post (${resp.provider}, ${resp.latencyMs}ms)`, t: new Date().toISOString() });
+
+    let imageUrl: string | undefined;
+    if (input.channel === 'instagram' && data.image_prompt) {
+      const { generateImage } = await import('../channels/imageGen.js');
+      const { uploadAgentImage } = await import('../db/supabase.js');
+      const imageBuffer = await generateImage(data.image_prompt);
+      imageUrl = await uploadAgentImage(imageBuffer, `social-posts/${Date.now()}-instagram.jpg`);
+      trace.push({ state: 'done', title: `Generated + uploaded image`, t: new Date().toISOString() });
+    }
 
     return {
       summary: `${input.channel} post drafted: "${input.topic}"`,
@@ -127,6 +140,7 @@ Output JSON:
         hashtags: data.hashtags,
         suggested_publish_time_local: data.suggested_publish_time_local,
         topic: input.topic,
+        image_url: imageUrl,
       } satisfies ProposalData,
       trace: [...trace, { state: 'current', title: 'Awaiting publish approval', t: new Date().toISOString() }],
       evidence: [
@@ -135,6 +149,7 @@ Output JSON:
         { label: 'Words', value: String(data.body.split(/\s+/).length) },
         { label: 'Suggested time', value: data.suggested_publish_time_local },
         { label: 'Hashtags', value: String(data.hashtags.length) },
+        ...(imageUrl ? [{ label: 'Image', value: imageUrl }] : []),
         { label: 'Wall time', value: `${Date.now() - t0}ms` },
       ],
       // Social posts always go through human review
@@ -146,9 +161,9 @@ Output JSON:
     const p = proposal as unknown as ProposalData;
     const text = p.hashtags.length ? `${p.body}\n\n${p.hashtags.map(h => `#${h}`).join(' ')}` : p.body;
 
-    // Real publish for the two channels with a working adapter + configured
-    // credentials. Others (Instagram/TikTok/X/Telegram/WhatsApp) stay drafts —
-    // no adapter built yet, or the content type (image/video) isn't produced here.
+    // Real publish for channels with a working adapter + configured
+    // credentials. Others (TikTok/X/Telegram/WhatsApp) stay drafts —
+    // no adapter built yet, or the content type (video) isn't produced here.
     if (p.channel === 'linkedin' || p.channel === 'facebook') {
       const { publishLinkedIn, publishFacebook } = await import('../channels/social.js');
       const publish = p.channel === 'linkedin' ? publishLinkedIn : publishFacebook;
@@ -166,6 +181,30 @@ Output JSON:
             publish_status: 'published',
             post_id: result.post_id,
             post_url: result.post_url,
+          },
+        };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+
+    if (p.channel === 'instagram') {
+      if (!p.image_url) return { ok: false, error: 'No image was generated at draft time — cannot publish to Instagram' };
+      const { publishInstagram } = await import('../channels/social.js');
+      try {
+        const result = await publishInstagram(p.image_url, text);
+        return {
+          ok: true,
+          details: {
+            channel: p.channel,
+            language: p.language,
+            topic: p.topic,
+            full_body: p.body,
+            hashtags: p.hashtags,
+            image_url: p.image_url,
+            suggested_publish_time_local: p.suggested_publish_time_local,
+            publish_status: 'published',
+            post_id: result.post_id,
           },
         };
       } catch (err) {
