@@ -119,8 +119,8 @@ Output JSON:
 
     if (p.channel === 'email' && p.email) {
       try {
-        const { sendEmail } = await import('../channels/email.js');
-        const result = await sendEmail(p.email, p.subject, p.message);
+        const { sendEmail, toBrandedHtml } = await import('../channels/email.js');
+        const result = await sendEmail(p.email, p.subject, p.message, toBrandedHtml(p.message));
         await sb.from('broker_prospects').update({
           status: 'contacted',
           contacted_at: new Date().toISOString(),
