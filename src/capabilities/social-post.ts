@@ -159,7 +159,10 @@ Output JSON:
 
   async execute(_input, proposal): Promise<ExecuteResult> {
     const p = proposal as unknown as ProposalData;
-    const text = p.hashtags.length ? `${p.body}\n\n${p.hashtags.map(h => `#${h}`).join(' ')}` : p.body;
+    // The LLM inconsistently includes a leading # in the hashtags array —
+    // strip it before re-adding so a real post can't end up with "##tag"
+    // (confirmed live on Instagram post 18099542405212816 before this fix).
+    const text = p.hashtags.length ? `${p.body}\n\n${p.hashtags.map(h => `#${h.replace(/^#+/, '')}`).join(' ')}` : p.body;
 
     // Real publish for channels with a working adapter + configured
     // credentials. Others (TikTok/X/Telegram/WhatsApp) stay drafts —
