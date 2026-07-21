@@ -40,7 +40,7 @@ export const brokerRecruit: Capability<Input> = {
 
     const { data: prospect, error } = await sb
       .from('broker_prospects')
-      .select('id, full_name, company, location, country, email, linkedin_url, language, source, notes, fit_score, status')
+      .select('id, full_name, company, location, country, email, linkedin_url, language, source, notes, fit_score, status, email_bounced, bounce_reason')
       .eq('id', input.prospect_id)
       .single();
     if (error || !prospect) throw new Error(`Prospect ${input.prospect_id} not found: ${error?.message}`);
@@ -50,8 +50,14 @@ export const brokerRecruit: Capability<Input> = {
     // LinkedIn DM needs Sales Navigator + InMail API access (gated), and
     // there's no LinkedIn URL → personal message field to fill anyway.
     // WhatsApp Business needs Meta business verification we haven't done.
-    const channel: ProposalData['channel'] = prospect.email ? 'email' : 'manual';
+    // A previously-bounced address never auto-selects email again — repeat
+    // sends to a bad address hurt cobrop.com's sender reputation with
+    // every mail provider, not just this one prospect.
+    const channel: ProposalData['channel'] = (prospect.email && !prospect.email_bounced) ? 'email' : 'manual';
     const lang = prospect.language || 'English';
+    if (prospect.email_bounced) {
+      trace.push({ state: 'done', title: `⚠ This address previously bounced (${prospect.bounce_reason || 'reason unknown'}) — forcing draft-only`, t: new Date().toISOString() });
+    }
     trace.push({ state: 'done', title: `Channel: ${channel}${!prospect.email ? ' (no email on file — draft only, send manually)' : ''}`, t: new Date().toISOString() });
 
     const [product, marketing] = await Promise.all([loadProductKnowledge(), loadMarketingVoice()]);
@@ -106,6 +112,10 @@ Output JSON:
         { label: 'Location', value: `${prospect.location ?? '—'}${prospect.country ? ', ' + prospect.country : ''}` },
         { label: 'Source', value: prospect.source },
         { label: 'Channel', value: channel },
+        // Explicit, unambiguous — this is the exact address that will
+        // receive a real email the moment this gets approved.
+        { label: channel === 'email' ? 'Sending to' : 'Email on file', value: prospect.email ?? '(none — draft only)' },
+        ...(prospect.email_bounced ? [{ label: '⚠ Bounced before', value: prospect.bounce_reason || 'yes' }] : []),
         { label: 'Wall time', value: `${Date.now() - t0}ms` },
       ],
       // First contact with a real external person — always human-reviewed.

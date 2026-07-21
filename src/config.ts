@@ -39,6 +39,9 @@ const Env = z.object({
   // https://resend.com/api-keys
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().optional(), // e.g. "CoBrop <hello@cobrop.com>" — needs a verified domain
+  // Resend dashboard → Webhooks → Add Endpoint → copy the signing secret
+  // (starts with "whsec_"). Used to verify /webhooks/resend is really Resend.
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
 
   // Queue
   QUEUE_POLL_MS: z.coerce.number().default(5000),

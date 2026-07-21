@@ -13,6 +13,7 @@ import { health } from './routes/health.js';
 import { webhooks } from './routes/webhooks.js';
 import { approvals } from './routes/approvals.js';
 import { agent } from './routes/agent.js';
+import { resendWebhook } from './routes/resend-webhook.js';
 
 const app = new Hono();
 
@@ -26,12 +27,17 @@ app.route('/health', health);
 app.route('/webhooks', webhooks);
 app.route('/approvals', approvals);
 app.route('/agent', agent);
+// Separate top-level mount (not under /webhooks) so there's zero ambiguity
+// about whether the generic WEBHOOK_SECRET middleware on the webhooks
+// router could ever apply here — Resend's Svix signing is verified
+// entirely inside resend-webhook.ts instead.
+app.route('/resend-webhook', resendWebhook);
 
 app.get('/', (c) =>
   c.json({
     service: 'cobrop-agent',
     docs: 'See README.md',
-    endpoints: ['/health', '/webhooks/*', '/approvals', '/agent/draft', '/agent/run', '/agent/kpis', '/agent/activity', '/agent/cron/tick'],
+    endpoints: ['/health', '/webhooks/*', '/approvals', '/agent/draft', '/agent/run', '/agent/kpis', '/agent/activity', '/agent/cron/tick', '/agent/prospects', '/resend-webhook'],
   }),
 );
 

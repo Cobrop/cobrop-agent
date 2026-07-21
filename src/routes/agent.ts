@@ -176,6 +176,8 @@ agent.get('/prospects', verifyAdmin, async (c) => {
   return c.json({ prospects: data });
 });
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 agent.post('/prospects', verifyAdmin, async (c) => {
   const body = await c.req.json<{
     full_name: string; company?: string; location?: string; country?: string;
@@ -183,6 +185,9 @@ agent.post('/prospects', verifyAdmin, async (c) => {
     source?: string; notes?: string; fit_score?: number;
   }>();
   if (!body.full_name) return c.json({ error: 'full_name required' }, 400);
+  if (body.email && !EMAIL_RE.test(body.email)) {
+    return c.json({ error: `"${body.email}" doesn't look like a valid email address` }, 400);
+  }
   const { data, error } = await supabase()
     .from('broker_prospects')
     .insert({ ...body, source: body.source || 'manual' })

@@ -135,6 +135,12 @@ create table if not exists broker_prospects (
 create index if not exists broker_prospects_status_idx
   on broker_prospects (status, created_at desc);
 
+-- Bounce tracking (Resend webhook — see /webhooks/resend). ADD COLUMN
+-- IF NOT EXISTS is genuinely idempotent in Postgres, unlike CREATE
+-- POLICY IF NOT EXISTS above — safe to re-run.
+alter table broker_prospects add column if not exists email_bounced boolean not null default false;
+alter table broker_prospects add column if not exists bounce_reason text;
+
 -- ══════════════════════════════════════════════════════════════════════
 -- Row-Level Security · enforce least-privilege for the agent
 -- ══════════════════════════════════════════════════════════════════════
