@@ -5,9 +5,14 @@
   "env": {
     "NODEJS_HELPERS": "0"
   },
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "public/**"
+    }
+  },
   "crons": [
     {
-      "path": "/agent/cron/tick?secret=__SET_CRON_SECRET_IN_VERCEL_ENV__&max=5",
+      "path": "/agent/cron/tick?max=5",
       "schedule": "0 6 * * *"
     }
   ]

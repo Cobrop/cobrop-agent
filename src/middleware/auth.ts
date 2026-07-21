@@ -12,7 +12,13 @@ export const verifyWebhook = async (c: Context, next: Next) => {
 };
 
 export const verifyCron = async (c: Context, next: Next) => {
-  const provided = c.req.header('x-cron-secret') || c.req.query('secret');
+  // Vercel's own Cron Jobs auto-inject `Authorization: Bearer $CRON_SECRET`
+  // (matching the CRON_SECRET env var already set here) — accept that
+  // alongside the explicit header/query param used by GitHub Actions and
+  // manual calls, so the vercel.json cron path never needs the secret
+  // written into it (this repo is public).
+  const bearer = c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
+  const provided = c.req.header('x-cron-secret') || c.req.query('secret') || bearer;
   if (provided !== config.CRON_SECRET) {
     return c.json({ error: 'unauthorized' }, 401);
   }
