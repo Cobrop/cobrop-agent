@@ -241,9 +241,12 @@ create policy "properties_agent_update_safe_cols"
   using (true)
   with check (true); -- column-level constraints enforced via grants below
 
+-- description_am/ar/fr columns don't exist on the real properties table
+-- (confirmed via a live query — this would have failed with "column does
+-- not exist" the moment execution reached it) — only granting on columns
+-- that actually exist.
 revoke update on properties from platform_agent;
-grant  update (description, description_am, description_ar, description_fr,
-               agent_status, agent_notes, price_recommendation)
+grant  update (description, agent_status, agent_notes, price_recommendation)
    on properties to platform_agent;
 
 -- Profiles: READ ONLY (cannot modify roles, payment fields, auth)
