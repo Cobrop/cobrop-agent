@@ -417,6 +417,10 @@ Output ONLY the post body (no title, no headings, no meta).`;
 //   published   — capability auto-executed already, nothing left to click
 //   error       — the real run failed; show why instead of a dead button
 function PublishButton({ modal, isBlog, engine, onClose }) {
+  // A read-only preview of a row that already exists in blog_posts has nothing
+  // to approve — the Recent posts list owns the real publish action. Rendering
+  // a button here would recreate the dead-button problem this component fixes.
+  if (modal.kind === "preview") return null;
   const label = isBlog ? "Approve & publish" : "Approve & send";
   const pub = modal.publish;
   if (!pub || modal.status !== "done") {

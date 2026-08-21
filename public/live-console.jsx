@@ -41,6 +41,10 @@ function makeLiveApi(cfg) {
     // Blog
     blogFeed:         ()                    => call('/agent/blog/feed'),
     blogSchedule:     (body)               => call('/agent/run', { method: 'POST', body: JSON.stringify({ capability: 'blog-draft', input: body }) }),
+    // Real rows from blog_posts. blog-draft.execute() writes status:'draft', so
+    // publishing is a separate deliberate step rather than part of approval.
+    blogPosts:        (n = 25)              => call(`/agent/blog/posts?limit=${n}`),
+    blogPublish:      (id)                  => call(`/agent/blog/posts/${id}/publish`, { method: 'POST', body: '{}' }),
     // Manual run
     run:              (capability, input)   => call('/agent/run', { method: 'POST', body: JSON.stringify({ capability, input }) }),
     // Broker recruitment — real prospects (broker_prospects table), added
@@ -201,6 +205,7 @@ function LiveAgentConsole({ cfg, onDisconnect }) {
   const [kpis,       setKpis]       = useState(null);
   const [marketingFeed, setMktFeed] = useState({ executed: [], pending_approvals: [] });
   const [blogFeed,   setBlogFeed]   = useState({ executed: [], pending_approvals: [] });
+  const [blogPosts,  setBlogPosts]  = useState(null); // null = not loaded yet, [] = loaded and empty
   const [prospects,  setProspects]  = useState([]);
   const [paused,     setPaused]     = useState(false);
   const [now,        setNow]        = useState(Date.now());
@@ -267,10 +272,16 @@ function LiveAgentConsole({ cfg, onDisconnect }) {
     try { const r = await api.prospects('new'); setProspects(r.prospects || []); } catch { }
   }, [api]);
 
+  // Real blog_posts rows. Kept separate from blogFeed (which reads agent_actions
+  // and agent_approvals) because publishing acts on the post itself.
+  const fetchBlogPosts = useCallback(async () => {
+    try { const r = await api.blogPosts(25); setBlogPosts(r.posts || []); } catch { setBlogPosts([]); }
+  }, [api]);
+
   useEffect(() => {
     fetchApprovals(); fetchActivity(); fetchKpis();
-    fetchMarketingFeed(); fetchBlogFeed(); fetchProspects();
-  }, [fetchApprovals, fetchActivity, fetchKpis, fetchMarketingFeed, fetchBlogFeed, fetchProspects]);
+    fetchMarketingFeed(); fetchBlogFeed(); fetchProspects(); fetchBlogPosts();
+  }, [fetchApprovals, fetchActivity, fetchKpis, fetchMarketingFeed, fetchBlogFeed, fetchProspects, fetchBlogPosts]);
 
   useEffect(() => { const id = setInterval(fetchApprovals,     8000); return () => clearInterval(id); }, [fetchApprovals]);
   useEffect(() => { const id = setInterval(fetchActivity,      5000); return () => clearInterval(id); }, [fetchActivity]);
@@ -278,6 +289,7 @@ function LiveAgentConsole({ cfg, onDisconnect }) {
   useEffect(() => { const id = setInterval(fetchMarketingFeed,20000); return () => clearInterval(id); }, [fetchMarketingFeed]);
   useEffect(() => { const id = setInterval(fetchProspects,    20000); return () => clearInterval(id); }, [fetchProspects]);
   useEffect(() => { const id = setInterval(fetchBlogFeed,     20000); return () => clearInterval(id); }, [fetchBlogFeed]);
+  useEffect(() => { const id = setInterval(fetchBlogPosts,    20000); return () => clearInterval(id); }, [fetchBlogPosts]);
 
   // Combined feed
   const allEvents = [...localEvents, ...polledEvents].slice(0, 80);
@@ -523,6 +535,22 @@ Output ONLY the post body (no title, no headings, no meta).`;
     } finally { setAT(false); }
   }, [agentThinking, api, pushToast, dismissToast, fetchApprovals, fetchActivity]);
 
+  // Publish a real blog_posts draft. Returns true on success so the caller can
+  // reflect it; the 409 "already published" case is surfaced rather than hidden.
+  const publishBlogPost = useCallback(async (id, title) => {
+    try {
+      const r = await api.blogPublish(id);
+      pushToast({ kind: 'success', title: 'Published', msg: (title || r.post?.title || '').slice(0, 50) });
+      pushEvent({ type: 'blog', title: `Published: ${title || r.post?.title || id}`, meta: 'blog_posts · status → published', action: 'auto', risk: 'low' });
+      fetchBlogPosts();
+      return true;
+    } catch (e) {
+      pushToast({ kind: 'error', title: 'Publish failed', msg: e.message.slice(0, 90) });
+      fetchBlogPosts();
+      return false;
+    }
+  }, [api, pushToast, pushEvent, fetchBlogPosts]);
+
   const addProspect = useCallback(async (body) => {
     try {
       await api.addProspect(body);
@@ -544,6 +572,8 @@ Output ONLY the post body (no title, no headings, no meta).`;
     kpis, err, lastSync, cfg,
     // Marketing / Blog real data
     marketingFeed, blogFeed,
+    // Real blog_posts rows + the publish action behind the Publish button
+    blogPosts, publishBlogPost, refreshBlogPosts: fetchBlogPosts,
     // Schedule helpers (for screens to call directly)
     scheduleMarketingPost: (body) => api.marketingSchedule(body).then(fetchMarketingFeed).catch(e => pushToast({ kind: 'error', title: 'Schedule failed', msg: e.message })),
     scheduleBlogDraft:     (body) => api.blogSchedule(body).then(fetchBlogFeed).catch(e => pushToast({ kind: 'error', title: 'Schedule failed', msg: e.message })),

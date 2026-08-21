@@ -965,14 +965,18 @@ window.SettingsScreen = SettingsScreen;
 // picks topics that match brand voice, schedules consistently
 // ════════════════════════════════════════════════════════════════
 
-const PAST_POSTS = [
-  { tone: 1, title: "How brokers in Addis split fees with Nairobi (legally)", cat: "Co-brokerage", reads: "8.4k", time: "6m 12s", shares: 184, leads: 23, date: "Mar 18", tag: "top performer", trend: "up" },
-  { tone: 2, title: "10 photos every CoBrop listing needs — with examples",   cat: "Listing best-practice", reads: "12.1k", time: "8m 02s", shares: 412, leads: 41, date: "Mar 11", tag: "top performer", trend: "up" },
-  { tone: 3, title: "What 30,000 East African inquiries taught us about pricing", cat: "Market data", reads: "6.2k", time: "9m 30s", shares: 144, leads: 18, date: "Mar 04", tag: "evergreen", trend: "flat" },
-  { tone: 4, title: "The 2026 East Africa real estate outlook (mid-quarter)",   cat: "Market data", reads: "4.8k", time: "11m 04s", shares: 92, leads: 12, date: "Feb 25", tag: "evergreen", trend: "flat" },
-  { tone: 5, title: "Why I left agency life: a Dubai broker's take",            cat: "Founder voice", reads: "2.1k", time: "5m 50s", shares: 38, leads: 4, date: "Feb 18", tag: "low performer", trend: "down" },
-  { tone: 1, title: "Cross-border KYC for African real estate: a 2026 guide",   cat: "Compliance", reads: "3.4k", time: "12m 12s", shares: 61, leads: 7, date: "Feb 11", tag: "evergreen", trend: "flat" },
-];
+// The "Recent posts" list used to be a hardcoded PAST_POSTS array of six
+// invented posts with invented metrics, presented as things CoBrop had already
+// published. Clicking one asked the LLM to "reconstruct a plausible excerpt" of
+// a post that never existed — inventing statistics along the way — and the
+// Publish button beside it was permanently disabled because no real record
+// backed it. The list now reads blog_posts through the engine instead.
+
+function fmtPostDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
+}
 
 const TOPIC_PERF = [
   { name: "Co-brokerage explainers",   score: 92, posts: 6, leads: 124, low: false },
@@ -1013,6 +1017,10 @@ const SUGGESTED_TOPICS = [
 
 function BlogScreen() {
   const engine = window.useAgentEngine && window.useAgentEngine();
+  const [publishing, setPublishing] = React.useState(null); // post id mid-publish
+  const posts = engine?.blogPosts ?? null;
+  const publishedCount = (posts ?? []).filter(p => p.status === "published").length;
+  const draftCount     = (posts ?? []).filter(p => p.status !== "published").length;
   return (
     <React.Fragment>
       <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
@@ -1126,8 +1134,8 @@ function BlogScreen() {
               <span className="icon"><Icon.BookOpen size={13} /></span>
               Recent posts
             </div>
-            <span className="chip is-success">5 published</span>
-            <span className="chip is-warn">1 awaiting review</span>
+            <span className="chip is-success">{publishedCount} published</span>
+            <span className="chip is-warn">{draftCount} draft{draftCount === 1 ? "" : "s"}</span>
             <div className="card__head-right">
               <button className="btn is-sm is-ghost"><Icon.Filter size={11} /> All categories</button>
               <button className="btn is-sm is-cyan"><Icon.Plus size={11} /> Draft new</button>
@@ -1138,63 +1146,76 @@ function BlogScreen() {
             <div className="blog-post" style={{ background: "var(--cb-bg)", color: "var(--cb-ink-3)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em", padding: "6px 14px" }}>
               <div></div>
               <div>Post · Category · Date</div>
-              <div style={{ textAlign: "right" }}>Reads</div>
+              <div style={{ textAlign: "right" }}>Views</div>
               <div style={{ textAlign: "right" }}>Read time</div>
-              <div style={{ textAlign: "right" }}>Leads</div>
+              <div style={{ textAlign: "right" }}>Status</div>
               <div></div>
             </div>
-            {PAST_POSTS.map((p, i) => {
-              const TrendIcon = p.trend === "up" ? Icon.TrendingUp : p.trend === "down" ? Icon.TrendingDown : Icon.ArrowRight;
-              const trendColor = p.trend === "up" ? "var(--cb-success)" : p.trend === "down" ? "var(--cb-error)" : "var(--cb-ink-3)";
-              const openPost = () => engine && engine.generateAndPreview({
+            {(engine?.blogPosts ?? []).length === 0 ? (
+              <div style={{ padding: "22px 14px", textAlign: "center", color: "var(--cb-ink-3)", fontSize: 12 }}>
+                {engine?.blogPosts == null
+                  ? "Loading posts…"
+                  : "No posts yet. Use “Draft new” — the agent writes a draft, then publish it here."}
+              </div>
+            ) : (engine.blogPosts.map((p, i) => {
+              const isDraft = p.status !== "published";
+              // "preview" (not "blog") — this is an existing stored post being
+              // read back, not a fresh agent draft awaiting approval.
+              const openPost = () => engine.previewContent && engine.previewContent({
                 title: p.title,
-                eyebrow: p.cat,
-                kind: "blog",
-                prompt: `You are CoBrop's blog writer. CoBrop is a real-estate co-brokerage platform. Brand voice: confident, educational, empowering. NO emoji, NO clichés.
-
-Reconstruct a plausible 4-paragraph excerpt of this previously-published post (it was viewed ${p.reads} times, avg read time ${p.time}).
-
-TITLE: "${p.title}"
-CATEGORY: ${p.cat}
-
-Output ONLY the post body. Invent realistic East African real-estate stats if needed.`,
+                eyebrow: p.category || "Blog",
+                kind: "preview",
+                body: p.content || p.excerpt || "(no body stored for this post)",
               });
               return (
-                <div key={i} className="blog-post" style={{ cursor: "pointer" }} onClick={openPost}>
-                  <div className={"blog-post__thumb tone-" + p.tone}>{p.cat.split(" ")[0]}</div>
+                <div key={p.id || i} className="blog-post" style={{ cursor: "pointer" }} onClick={openPost}>
+                  <div className={"blog-post__thumb tone-" + ((i % 5) + 1)}>{(p.category || "Post").split(" ")[0]}</div>
                   <div>
                     <div className="blog-post__title">{p.title}</div>
                     <div className="blog-post__meta">
-                      <span className="chip is-blue" style={{ padding: "1px 6px", fontSize: 10 }}>{p.cat}</span>
-                      <span>{p.date}</span>
+                      {p.category && <span className="chip is-blue" style={{ padding: "1px 6px", fontSize: 10 }}>{p.category}</span>}
+                      <span>{fmtPostDate(p.published_at || p.created_at)}</span>
                       <span className="sep" style={{ color: "var(--cb-line-strong)" }}>·</span>
-                      {p.tag === "top performer" && <span className="chip is-success" style={{ padding: "1px 6px", fontSize: 10 }}><Icon.Star size={9} /> Top performer</span>}
-                      {p.tag === "evergreen"     && <span className="chip is-cyan"   style={{ padding: "1px 6px", fontSize: 10 }}>Evergreen</span>}
-                      {p.tag === "low performer" && <span className="chip is-error"  style={{ padding: "1px 6px", fontSize: 10 }}>Low · cut from rotation</span>}
+                      {isDraft
+                        ? <span className="chip is-warn"    style={{ padding: "1px 6px", fontSize: 10 }}>Draft</span>
+                        : <span className="chip is-success" style={{ padding: "1px 6px", fontSize: 10 }}>Published</span>}
+                      {p.author_name === "CoBrop Agent" && <span className="chip is-cyan" style={{ padding: "1px 6px", fontSize: 10 }}>By agent</span>}
                     </div>
                   </div>
                   <div>
-                    <div className="blog-post__metric" style={{ color: trendColor, display: "flex", alignItems: "baseline", gap: 4, justifyContent: "flex-end" }}>
-                      <TrendIcon size={10} color={trendColor} />
-                      {p.reads}
-                    </div>
-                    <div className="blog-post__metric-lab">Reads</div>
+                    <div className="blog-post__metric" style={{ textAlign: "right" }}>{p.views_count ?? 0}</div>
+                    <div className="blog-post__metric-lab">Views</div>
                   </div>
                   <div>
-                    <div className="blog-post__metric">{p.time}</div>
-                    <div className="blog-post__metric-lab">Avg</div>
+                    <div className="blog-post__metric">{p.reading_time ? p.reading_time + "m" : "—"}</div>
+                    <div className="blog-post__metric-lab">Read</div>
                   </div>
                   <div>
-                    <div className="blog-post__metric" style={{ color: p.leads >= 18 ? "var(--cb-cyan)" : "var(--cb-ink)" }}>{p.leads}</div>
-                    <div className="blog-post__metric-lab">Leads</div>
+                    <div className="blog-post__metric">{isDraft ? "—" : fmtPostDate(p.published_at)}</div>
+                    <div className="blog-post__metric-lab">{isDraft ? "Unpublished" : "Live"}</div>
                   </div>
                   <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
-                    <button className="btn is-sm is-cyan" onClick={openPost}><Icon.Eye size={11} /></button>
-                    <button className="btn is-sm is-ghost" onClick={() => engine?.pushToast({ kind: "info", msg: "Post editor would open here" })}><Icon.Edit size={11} /></button>
+                    <button className="btn is-sm is-cyan" onClick={openPost} title="Preview"><Icon.Eye size={11} /></button>
+                    {isDraft && (
+                      <button
+                        className="btn is-sm is-success"
+                        disabled={publishing === p.id}
+                        title="Set status to published"
+                        onClick={async () => {
+                          setPublishing(p.id);
+                          try { await engine.publishBlogPost?.(p.id, p.title); }
+                          finally { setPublishing(null); }
+                        }}
+                      >
+                        {publishing === p.id
+                          ? <span className="toast__spinner" style={{ width: 10, height: 10 }}></span>
+                          : <Icon.CheckCircle size={11} />} Publish
+                      </button>
+                    )}
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
 
