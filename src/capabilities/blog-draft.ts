@@ -228,7 +228,12 @@ async execute(_input, proposal): Promise<ExecuteResult> {
       // semantic HTML regardless of what the model returned.
       content: toPostHtml(p.body),
       category: p.category,
-      status: 'draft',
+      // execute() only ever runs after a human approves — this capability sets
+      // force_approval:true unconditionally, so nothing reaches here unattended.
+      // It used to insert status:'draft', which meant clicking "Approve &
+      // publish" approved *creating a draft* and the post never went live.
+      status: 'published',
+      published_at: new Date().toISOString(),
       author_name: 'CoBrop Agent',
       reading_time: Math.max(1, Math.round(wordCount / 220)),
       meta_title: p.title.slice(0, 60),
@@ -240,7 +245,7 @@ async execute(_input, proposal): Promise<ExecuteResult> {
       ok: true,
       details: {
         title: p.title, category: p.category, word_count: wordCount,
-        slug, status: 'draft',
+        slug, status: 'published',
         suggested_image_prompts: p.suggested_image_prompts,
         full_body: p.body,
       },
