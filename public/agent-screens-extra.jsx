@@ -972,6 +972,19 @@ window.SettingsScreen = SettingsScreen;
 // Publish button beside it was permanently disabled because no real record
 // backed it. The list now reads blog_posts through the engine instead.
 
+// blog_posts.content is HTML — the older posts are Word exports full of
+// <p class="MsoNormal"> and inline colours. The preview modal renders its body
+// as plain text (it splits on blank lines and wraps each block in <p>), so the
+// markup has to come off first or the reader sees raw tags.
+function htmlToText(html) {
+  if (!html) return "";
+  const el = document.createElement("div");
+  el.innerHTML = String(html)
+    .replace(/<\/(p|div|h[1-6]|li)\s*>/gi, "\n\n")
+    .replace(/<br\s*\/?>/gi, "\n");
+  return (el.textContent || "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function fmtPostDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -1031,7 +1044,8 @@ function BlogPostEditor({ post, engine, onClose }) {
           <label style={{ fontSize: 11, fontWeight: 700, color: "var(--cb-ink-2)" }}>Excerpt
             <textarea value={form.excerpt} onChange={set("excerpt")} rows={2} style={{ ...FIELD_STYLE, resize: "vertical" }} />
           </label>
-          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--cb-ink-2)" }}>Body
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--cb-ink-2)" }}>
+            Body <span style={{ fontWeight: 500, color: "var(--cb-ink-3)" }}>— raw HTML, exactly as stored and rendered</span>
             <textarea value={form.content} onChange={set("content")} rows={14} style={{ ...FIELD_STYLE, resize: "vertical", lineHeight: 1.5 }} />
           </label>
         </div>
@@ -1047,32 +1061,10 @@ function BlogPostEditor({ post, engine, onClose }) {
   );
 }
 
-const SUGGESTED_TOPICS = [
-  {
-    title: "Why Kigali ↔ Addis is becoming the East African real estate corridor",
-    why: 'Pattern: <b>Co-brokerage explainers</b> + <b>regional case studies</b> drive 3.4× more leads than average. Past post on Addis↔Nairobi hit 8.4k reads. Rwanda traffic on CoBrop +180% since Feb — content gap detected.',
-    cat: "Co-brokerage",
-    predReads: "9–11k",
-    predLeads: "22–28",
-    risk: "low",
-  },
-  {
-    title: "10 photos every CoBrop listing needs — the 2026 edition",
-    why: 'Refresh of top-performing post (<b>12.1k reads · 41 leads</b>). Engagement now decaying month-over-month (−18%). Annual refresh is a proven pattern: <b>+62% reads</b> on first re-issue.',
-    cat: "Listing best-practice",
-    predReads: "10–14k",
-    predLeads: "35–48",
-    risk: "low",
-  },
-  {
-    title: "What 12,000 Dubai → East Africa inquiries told us about pricing",
-    why: 'Pairs <b>Market data</b> (76 score) with <b>Co-brokerage</b> (92 score). Dubai cohort grew +112% in Q1. No existing post covers this angle.',
-    cat: "Market data",
-    predReads: "5–7k",
-    predLeads: "12–18",
-    risk: "med",
-  },
-];
+// SUGGESTED_TOPICS used to live here: three hardcoded topics with invented
+// predicted reads, predicted leads and claims like "Rwanda traffic +180%".
+// Nothing in the schema can predict engagement, so the card now shows real
+// coverage gaps from blog_posts instead (engine.blogStats.by_category).
 
 function BlogScreen() {
   const engine = window.useAgentEngine && window.useAgentEngine();
@@ -1170,32 +1162,35 @@ function BlogScreen() {
               <span className="icon"><Icon.Lightbulb size={13} /></span>
               Suggested next posts
             </div>
-            <span className="chip is-cyan">3 drafts ready</span>
+            
             <div className="card__head-right">
               <button className="btn is-sm is-ghost"><Icon.RotateCw size={11} /> More</button>
             </div>
           </div>
           <div className="card__body" style={{ gap: 10 }}>
-            {SUGGESTED_TOPICS.map((s, i) => (
-              <div key={i} className="suggest-topic">
-                <div className="suggest-topic__title">{s.title}</div>
-                <div className="suggest-topic__why" dangerouslySetInnerHTML={{ __html: s.why }}></div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                  <span className="chip is-blue">{s.cat}</span>
-                  <span className="chip"><Icon.Eye size={10} /> {s.predReads} pred. reads</span>
-                  <span className="chip is-success"><Icon.Users size={10} /> {s.predLeads} pred. leads</span>
-                  <span className={"risktag is-" + s.risk}>{s.risk} risk</span>
+            {(byCategory ?? []).length === 0 ? (
+              <div style={{ color: "var(--cb-ink-3)", fontSize: 12 }}>
+                {byCategory == null ? "Loading…" : "No posts yet — nothing to compare against."}
+              </div>
+            ) : [...byCategory].sort((a, b) => a.posts - b.posts).slice(0, 4).map(t => (
+              <div key={t.category} className="suggest-topic">
+                <div className="suggest-topic__title">{t.category}</div>
+                <div className="suggest-topic__why">
+                  {t.posts} post{t.posts === 1 ? "" : "s"} · {t.views.toLocaleString()} view{t.views === 1 ? "" : "s"}
+                  {t.published < t.posts ? ` · ${t.posts - t.published} unpublished` : ""}
+                  {t.posts <= 2 ? " — thinnest coverage" : ""}
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button
                     className="btn is-sm is-cyan"
                     disabled={engine?.agentThinking}
-                    onClick={() => engine && engine.draftBlogPost({ title: s.title, category: s.cat })}
+                    onClick={() => {
+                      const title = window.prompt(`Title for a new "${t.category}" post?`);
+                      if (title && title.trim()) engine?.draftBlogPost({ title: title.trim(), category: t.category });
+                    }}
                   >
-                    <Icon.FileText size={11} /> {engine?.agentThinking ? "Drafting…" : "Draft full post"}
+                    <Icon.FileText size={11} /> {engine?.agentThinking ? "Drafting…" : "Draft a post"}
                   </button>
-                  <button className="btn is-sm"><Icon.Pencil size={11} /> Edit angle</button>
-                  <button className="btn is-sm is-ghost" style={{ marginLeft: "auto" }}><Icon.XCircle size={11} /> Skip</button>
                 </div>
               </div>
             ))}
@@ -1242,7 +1237,7 @@ function BlogScreen() {
                 title: p.title,
                 eyebrow: p.category || "Blog",
                 kind: "preview",
-                body: p.content || p.excerpt || "(no body stored for this post)",
+                body: htmlToText(p.content) || p.excerpt || "(no body stored for this post)",
               });
               return (
                 <div key={p.id || i} className="blog-post" style={{ cursor: "pointer" }} onClick={openPost}>

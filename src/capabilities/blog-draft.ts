@@ -14,6 +14,50 @@ import { supabase } from '../db/supabase.js';
 import { loadBlogStyle, loadProductKnowledge, styleFragmentForBlog, productFragment } from '../learning/style-profile.js';
 import type { Capability, CapabilityResult, ExecuteResult } from '../types.js';
 
+// Most existing blog_posts.content was pasted out of Microsoft Word, so it
+// carries <p class="MsoNormal" style="text-align:justify"> wrappers and inline
+// <span style="color:#1F5C7A"> on every paragraph. Feeding that raw into the
+// prompt as a "write at this quality level" reference taught the model to copy
+// the markup — the first ~90 characters of a 200-char sample are pure tags — and
+// its drafts came back full of Word artifacts. References are stripped to prose
+// before they reach the prompt.
+export function plainText(html: string | null | undefined): string {
+  return (html ?? '')
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<\/(p|div|h[1-6]|li|br)\s*>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// The model is asked for plain paragraphs (with "## " for subheadings), and we
+// render the markup ourselves. That keeps stored content consistent with how the
+// site renders posts, without inheriting Word's classes or hardcoded colours —
+// a fixed #1F5C7A on every paragraph also breaks any theme but the original one.
+export function toPostHtml(body: string): string {
+  return plainText(body)
+    .split(/\n{2,}/)
+    .map(block => block.trim())
+    .filter(Boolean)
+    .map(block => {
+      const heading = block.match(/^#{2,3}\s+(.*)$/);
+      if (heading) return `<h2>${escapeHtml(heading[1].trim())}</h2>`;
+      return `<p>${escapeHtml(block).replace(/\n/g, '<br />')}</p>`;
+    })
+    .join('\n\n');
+}
+
 interface Input {
   title: string;
   category?: string;
@@ -84,7 +128,7 @@ CATEGORY: ${input.category ?? 'CoBrop'}
 TARGET LENGTH: ${targetWords} words
 
 REFERENCE — TOP-PERFORMING PAST POSTS (write at this quality level):
-${(top ?? []).map(p => `  · "${p.title}" (${p.views_count ?? '?'} views) — first 200 chars: "${(p.content || '').slice(0, 200)}…"`).join('\n')}
+${(top ?? []).map(p => `  · "${p.title}" (${p.views_count ?? '?'} views) — opens: "${plainText(p.content).slice(0, 200)}…"`).join('\n')}
 
 REFERENCE — LOW PERFORMERS (do NOT write like these):
 ${(low ?? []).map(p => `  · "${p.title}" (${p.views_count ?? '?'} views)`).join('\n')}
@@ -96,6 +140,10 @@ Structure:
 2. PROBLEM: set up the broker-level problem the post solves. 70–100 words.
 3. PROMISE: tell the reader what they'll learn. 50–80 words.
 4. FIRST SECTION: dive into the first concrete point, with specifics. 250–400 words.
+
+FORMATTING: write plain prose only. No HTML, no CSS, no <p>/<span>/style attributes
+— the markup is generated afterwards. Separate paragraphs with a blank line. For a
+subheading, put it on its own line starting with "## ".
 
 Also produce:
 - A meta description (150–160 chars, for SEO)
@@ -175,8 +223,10 @@ async execute(_input, proposal): Promise<ExecuteResult> {
     const { error } = await supabase().from('blog_posts').insert({
       title: p.title,
       slug: `${slug}-${Date.now().toString(36).slice(-5)}`,
-      excerpt: p.intro.slice(0, 280),
-      content: p.body,
+      excerpt: plainText(p.intro).slice(0, 280),
+      // Rendered here rather than by the model, so stored content is clean
+      // semantic HTML regardless of what the model returned.
+      content: toPostHtml(p.body),
       category: p.category,
       status: 'draft',
       author_name: 'CoBrop Agent',
