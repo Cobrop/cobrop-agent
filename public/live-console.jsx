@@ -45,6 +45,8 @@ function makeLiveApi(cfg) {
     // publishing is a separate deliberate step rather than part of approval.
     blogPosts:        (n = 25)              => call(`/agent/blog/posts?limit=${n}`),
     blogPublish:      (id)                  => call(`/agent/blog/posts/${id}/publish`, { method: 'POST', body: '{}' }),
+    blogStats:        ()                    => call('/agent/blog/stats'),
+    blogUpdate:       (id, patch)           => call(`/agent/blog/posts/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
     // Manual run
     run:              (capability, input)   => call('/agent/run', { method: 'POST', body: JSON.stringify({ capability, input }) }),
     // Broker recruitment — real prospects (broker_prospects table), added
@@ -206,6 +208,7 @@ function LiveAgentConsole({ cfg, onDisconnect }) {
   const [marketingFeed, setMktFeed] = useState({ executed: [], pending_approvals: [] });
   const [blogFeed,   setBlogFeed]   = useState({ executed: [], pending_approvals: [] });
   const [blogPosts,  setBlogPosts]  = useState(null); // null = not loaded yet, [] = loaded and empty
+  const [blogStats,  setBlogStats]  = useState(null); // real aggregates from blog_posts
   const [prospects,  setProspects]  = useState([]);
   const [paused,     setPaused]     = useState(false);
   const [now,        setNow]        = useState(Date.now());
@@ -276,7 +279,20 @@ function LiveAgentConsole({ cfg, onDisconnect }) {
   // and agent_approvals) because publishing acts on the post itself.
   const fetchBlogPosts = useCallback(async () => {
     try { const r = await api.blogPosts(25); setBlogPosts(r.posts || []); } catch { setBlogPosts([]); }
+    try { setBlogStats(await api.blogStats()); } catch { }
   }, [api]);
+
+  const updateBlogPost = useCallback(async (id, patch) => {
+    try {
+      const r = await api.blogUpdate(id, patch);
+      pushToast({ kind: 'success', title: 'Saved', msg: (r.post?.title || '').slice(0, 50) });
+      fetchBlogPosts();
+      return r.post;
+    } catch (e) {
+      pushToast({ kind: 'error', title: 'Save failed', msg: e.message.slice(0, 90) });
+      return null;
+    }
+  }, [api, pushToast, fetchBlogPosts]);
 
   useEffect(() => {
     fetchApprovals(); fetchActivity(); fetchKpis();
@@ -573,7 +589,7 @@ Output ONLY the post body (no title, no headings, no meta).`;
     // Marketing / Blog real data
     marketingFeed, blogFeed,
     // Real blog_posts rows + the publish action behind the Publish button
-    blogPosts, publishBlogPost, refreshBlogPosts: fetchBlogPosts,
+    blogPosts, blogStats, publishBlogPost, updateBlogPost, refreshBlogPosts: fetchBlogPosts,
     // Schedule helpers (for screens to call directly)
     scheduleMarketingPost: (body) => api.marketingSchedule(body).then(fetchMarketingFeed).catch(e => pushToast({ kind: 'error', title: 'Schedule failed', msg: e.message })),
     scheduleBlogDraft:     (body) => api.blogSchedule(body).then(fetchBlogFeed).catch(e => pushToast({ kind: 'error', title: 'Schedule failed', msg: e.message })),

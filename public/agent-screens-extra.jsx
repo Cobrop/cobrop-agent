@@ -978,15 +978,74 @@ function fmtPostDate(iso) {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
 }
 
-const TOPIC_PERF = [
-  { name: "Co-brokerage explainers",   score: 92, posts: 6, leads: 124, low: false },
-  { name: "Listing best-practice",     score: 88, posts: 8, leads: 96,  low: false },
-  { name: "Market data & outlook",     score: 76, posts: 5, leads: 47,  low: false },
-  { name: "Broker case studies",       score: 71, posts: 4, leads: 38,  low: false },
-  { name: "Compliance & legal",        score: 58, posts: 3, leads: 14,  low: false },
-  { name: "Founder voice / opinion",   score: 34, posts: 4, leads: 8,   low: true },
-  { name: "Generic real-estate tips",  score: 22, posts: 6, leads: 4,   low: true },
-];
+// TOPIC_PERF used to live here: seven invented categories with invented
+// scores and lead counts. Real per-category rollups now come from
+// /agent/blog/stats (engine.blogStats.by_category).
+
+// Edit form behind the row's pencil button, which previously only raised a
+// "Post editor would open here" toast. Saves through PATCH /agent/blog/posts/:id,
+// which accepts exactly these four fields.
+const FIELD_STYLE = {
+  width: "100%", marginTop: 4, boxSizing: "border-box", padding: "6px 8px",
+  fontSize: 12, fontFamily: "inherit", color: "var(--cb-ink)",
+  background: "var(--cb-surface)", border: "1px solid var(--cb-line-strong)",
+  borderRadius: 6, outline: "none",
+};
+
+function BlogPostEditor({ post, engine, onClose }) {
+  const [form, setForm] = React.useState({
+    title: post.title || "",
+    category: post.category || "",
+    excerpt: post.excerpt || "",
+    content: post.content || "",
+  });
+  const [saving, setSaving] = React.useState(false);
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  const dirty = ["title", "category", "excerpt", "content"].some(k => form[k] !== (post[k] || ""));
+
+  const save = async () => {
+    if (!form.title.trim() || saving) return;
+    setSaving(true);
+    const saved = await engine?.updateBlogPost?.(post.id, form);
+    setSaving(false);
+    if (saved) onClose();
+  };
+
+  return (
+    <div className="draft-overlay" onClick={onClose}>
+      <div className="draft-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 760 }}>
+        <div className="draft-modal__head">
+          <div className="draft-modal__eyebrow"><Icon.Edit size={11} color="var(--cb-cyan)" /> Edit post</div>
+          <div className="draft-modal__title">{post.title}</div>
+          <div style={{ fontSize: 11, color: "var(--cb-ink-3)", marginTop: 2 }}>
+            {post.status === "published" ? "Published — edits go live immediately" : "Draft — not visible publicly"}
+          </div>
+        </div>
+        <div className="draft-modal__body" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--cb-ink-2)" }}>Title
+            <input value={form.title} onChange={set("title")} style={FIELD_STYLE} />
+          </label>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--cb-ink-2)" }}>Category
+            <input value={form.category} onChange={set("category")} style={FIELD_STYLE} />
+          </label>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--cb-ink-2)" }}>Excerpt
+            <textarea value={form.excerpt} onChange={set("excerpt")} rows={2} style={{ ...FIELD_STYLE, resize: "vertical" }} />
+          </label>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--cb-ink-2)" }}>Body
+            <textarea value={form.content} onChange={set("content")} rows={14} style={{ ...FIELD_STYLE, resize: "vertical", lineHeight: 1.5 }} />
+          </label>
+        </div>
+        <div className="draft-modal__foot">
+          <button className="btn is-sm is-success" onClick={save} disabled={saving || !dirty || !form.title.trim()}>
+            {saving ? <span className="toast__spinner" style={{ width: 10, height: 10 }}></span> : <Icon.CheckCircle size={11} />}
+            {saving ? "Saving…" : dirty ? "Save changes" : "No changes"}
+          </button>
+          <button className="btn is-sm is-ghost" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const SUGGESTED_TOPICS = [
   {
@@ -1018,18 +1077,35 @@ const SUGGESTED_TOPICS = [
 function BlogScreen() {
   const engine = window.useAgentEngine && window.useAgentEngine();
   const [publishing, setPublishing] = React.useState(null); // post id mid-publish
+  const [editing, setEditing] = React.useState(null);       // post being edited
+  const st = engine?.blogStats?.totals ?? null;
+  const byCategory = engine?.blogStats?.by_category ?? null;
   const posts = engine?.blogPosts ?? null;
   const publishedCount = (posts ?? []).filter(p => p.status === "published").length;
   const draftCount     = (posts ?? []).filter(p => p.status !== "published").length;
   return (
     <React.Fragment>
+      {/* Every tile below is computed from blog_posts. The previous five reported
+          shares, blog-attributed leads and a "brand consistency" score — none of
+          which exist anywhere in the schema — so they were removed rather than
+          rewired. Deltas are gone for the same reason: nothing stores history. */}
       <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
-        <KpiTile kpi={{ key: "posts", icon: "BookOpen", label: "Posts · 30d",       value: "18",   unit: "",  delta: "+6",   dir: "up", sub: "6 by agent, 12 reviewed" }} />
-        <KpiTile kpi={{ key: "reads", icon: "Eye",      label: "Reads · 30d",       value: "47.2", unit: "k", delta: "+34%", dir: "up", sub: "avg 7m 18s read time" }} />
-        <KpiTile kpi={{ key: "shares",icon: "Share2",   label: "Shares · 30d",      value: "1,140",unit: "",  delta: "+212", dir: "up", sub: "LinkedIn +84%" }} />
-        <KpiTile kpi={{ key: "leads", icon: "Users",    label: "Leads attributed",  value: "144",  unit: "",  delta: "+41",  dir: "up", sub: "blog → broker signup" }} />
-        <KpiTile kpi={{ key: "consis",icon: "Type",     label: "Brand consistency", value: "94",   unit: "%", delta: "+2pp", dir: "up", sub: "tone · structure · length" }} />
+        <KpiTile kpi={{ key: "posts",  icon: "BookOpen", label: "Posts · all time", value: st ? String(st.posts) : "—", unit: "",
+                        sub: st ? `${st.published} published · ${st.drafts} draft${st.drafts === 1 ? "" : "s"}` : "loading…" }} />
+        <KpiTile kpi={{ key: "drafts", icon: "Edit",     label: "Awaiting publish", value: st ? String(st.drafts) : "—", unit: "",
+                        sub: st && st.drafts > 0 ? "publish from the list below" : "nothing pending" }} />
+        <KpiTile kpi={{ key: "views",  icon: "Eye",      label: "Views · all time", value: st ? st.views.toLocaleString() : "—", unit: "",
+                        sub: "blog_posts.views_count" }} />
+        <KpiTile kpi={{ key: "read",   icon: "Clock",    label: "Avg read time",    value: st && st.avg_reading_time != null ? String(st.avg_reading_time) : "—", unit: "m",
+                        sub: "estimated at draft time" }} />
+        <KpiTile kpi={{ key: "agent",  icon: "Sparkles", label: "Written by agent", value: st ? String(st.by_agent) : "—", unit: "",
+                        sub: st ? `of ${st.posts} total` : "loading…" }} />
       </div>
+      {st && st.published_last_30d === 0 && (
+        <div style={{ fontSize: 11, color: "var(--cb-ink-3)", margin: "-4px 2px 0" }}>
+          Nothing published in the last 30 days — these figures are all-time.
+        </div>
+      )}
 
       {/* Topic intelligence + suggested next */}
       <div className="row-2">
@@ -1052,35 +1128,36 @@ function BlogScreen() {
                 <div>Engagement · posts · leads</div>
                 <div style={{ textAlign: "right" }}>Score</div>
               </div>
-              {TOPIC_PERF.map(t => (
-                <div key={t.name} className="topic-row">
-                  <div>
-                    <div className="topic-row__name">{t.name}</div>
-                    <div style={{ fontSize: 10.5, color: "var(--cb-ink-3)", marginTop: 1 }}>
-                      {t.posts} posts · {t.leads} leads
+              {(byCategory ?? []).length === 0 ? (
+                <div style={{ padding: "14px 0", color: "var(--cb-ink-3)", fontSize: 12 }}>
+                  {byCategory == null ? "Loading…" : "No posts yet."}
+                </div>
+              ) : byCategory.map(t => {
+                // Bar is share of the best-performing category by views, not a
+                // quality "score" — nothing in the schema scores a topic.
+                const top = Math.max(...byCategory.map(x => x.views), 1);
+                const pct = Math.round((t.views / top) * 100);
+                return (
+                  <div key={t.category} className="topic-row">
+                    <div>
+                      <div className="topic-row__name">{t.category}</div>
+                      <div style={{ fontSize: 10.5, color: "var(--cb-ink-3)", marginTop: 1 }}>
+                        {t.posts} post{t.posts === 1 ? "" : "s"} · {t.published} published
+                      </div>
                     </div>
+                    <div className="topic-row__bar"><div style={{ width: pct + "%" }}></div></div>
+                    <div className="topic-row__score">{t.views.toLocaleString()}</div>
                   </div>
-                  <div className={"topic-row__bar" + (t.low ? " is-low" : "")}>
-                    <div style={{ width: t.score + "%" }}></div>
-                  </div>
-                  <div className="topic-row__score" style={{ color: t.low ? "var(--cb-error)" : "var(--cb-ink)" }}>{t.score}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-            <div style={{
-              display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12,
-              borderTop: "1px solid var(--cb-line)", paddingTop: 12
-            }}>
-              <div className="evidence__item" style={{ background: "var(--cb-success-soft)", border: "1px solid #BFE6D2" }}>
-                <div className="lab" style={{ color: "#0e8b58" }}>What's working</div>
-                <div className="val" style={{ fontSize: 11, fontWeight: 500, lineHeight: 1.4, color: "#0a3d48" }}>
-                  Posts pairing <b>regional data</b> with <b>concrete broker stories</b> outperform by 3.4×. Long-form (8–12 min) beats short (sub-5min) on lead conversion.
-                </div>
-              </div>
-              <div className="evidence__item" style={{ background: "var(--cb-error-soft)", border: "1px solid #F2C2CC" }}>
-                <div className="lab" style={{ color: "#b92444" }}>What to stop</div>
-                <div className="val" style={{ fontSize: 11, fontWeight: 500, lineHeight: 1.4, color: "#8c1b35" }}>
-                  Generic tips & first-person founder voice underperform. Cut from rotation. Recover ~6 hrs/wk of agent time.
+            <div style={{ marginTop: 12, borderTop: "1px solid var(--cb-line)", paddingTop: 12 }}>
+              <div className="evidence__item">
+                <div className="lab">Ranked by views</div>
+                <div className="val" style={{ fontSize: 11, fontWeight: 500, lineHeight: 1.4 }}>
+                  Category names come straight from <b>blog_posts.category</b> and are inconsistent
+                  (<code>market-trends</code> vs <code>Co-brokerage</code> vs <code>Testing</code>).
+                  Worth normalising before reading much into the ranking.
                 </div>
               </div>
             </div>
@@ -1196,6 +1273,7 @@ function BlogScreen() {
                   </div>
                   <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
                     <button className="btn is-sm is-cyan" onClick={openPost} title="Preview"><Icon.Eye size={11} /></button>
+                    <button className="btn is-sm is-ghost" title="Edit" onClick={() => setEditing(p)}><Icon.Edit size={11} /></button>
                     {isDraft && (
                       <button
                         className="btn is-sm is-success"
@@ -1315,6 +1393,8 @@ function BlogScreen() {
           </div>
         </div>
       </div>
+
+      {editing && <BlogPostEditor post={editing} engine={engine} onClose={() => setEditing(null)} />}
     </React.Fragment>
   );
 }

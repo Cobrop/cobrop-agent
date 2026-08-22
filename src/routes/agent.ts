@@ -101,6 +101,80 @@ agent.get('/blog/posts', verifyAdmin, async (c) => {
   return c.json({ posts: data ?? [] });
 });
 
+// Real aggregates for the Blog screen. Everything here is derived from
+// blog_posts — deliberately narrow, because the tiles this replaces reported
+// shares, blog-attributed leads and a "brand consistency" score that have no
+// source anywhere in the schema.
+agent.get('/blog/stats', verifyAdmin, async (c) => {
+  const { data, error } = await supabase()
+    .from('blog_posts')
+    .select('category, status, views_count, reading_time, author_name, published_at');
+  if (error) return c.json({ error: error.message }, 500);
+  const posts = data ?? [];
+
+  const published = posts.filter((p) => p.status === 'published');
+  const readingTimes = posts.map((p) => p.reading_time).filter((n): n is number => typeof n === 'number' && n > 0);
+
+  const byCategory = new Map<string, { category: string; posts: number; views: number; published: number }>();
+  for (const p of posts) {
+    const key = p.category || '(uncategorised)';
+    const row = byCategory.get(key) ?? { category: key, posts: 0, views: 0, published: 0 };
+    row.posts += 1;
+    row.views += p.views_count ?? 0;
+    if (p.status === 'published') row.published += 1;
+    byCategory.set(key, row);
+  }
+
+  return c.json({
+    totals: {
+      posts: posts.length,
+      published: published.length,
+      drafts: posts.length - published.length,
+      by_agent: posts.filter((p) => p.author_name === 'CoBrop Agent').length,
+      views: posts.reduce((sum, p) => sum + (p.views_count ?? 0), 0),
+      avg_reading_time: readingTimes.length
+        ? Math.round((readingTimes.reduce((a, b) => a + b, 0) / readingTimes.length) * 10) / 10
+        : null,
+      published_last_30d: published.filter(
+        (p) => p.published_at && Date.parse(p.published_at) > Date.now() - 30 * 86400000,
+      ).length,
+    },
+    by_category: [...byCategory.values()].sort((a, b) => b.views - a.views || b.posts - a.posts),
+  });
+});
+
+// Edit a post in place. Only these four fields — status/published_at belong to
+// the publish endpoint, and the rest (slug, counters) are not the console's to
+// rewrite.
+const EDITABLE_FIELDS = ['title', 'category', 'excerpt', 'content'] as const;
+
+agent.patch('/blog/posts/:id', verifyAdmin, async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json<Partial<Record<(typeof EDITABLE_FIELDS)[number], string>>>();
+
+  const patch: Record<string, string> = {};
+  for (const f of EDITABLE_FIELDS) {
+    if (typeof body[f] === 'string') patch[f] = body[f] as string;
+  }
+  if (!Object.keys(patch).length) {
+    return c.json({ error: `nothing to update — editable fields: ${EDITABLE_FIELDS.join(', ')}` }, 400);
+  }
+  if ('title' in patch && !patch.title.trim()) {
+    return c.json({ error: 'title cannot be empty' }, 400);
+  }
+  patch.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase()
+    .from('blog_posts')
+    .update(patch)
+    .eq('id', id)
+    .select('id, title, slug, excerpt, content, category, status, published_at')
+    .maybeSingle();
+  if (error) return c.json({ error: error.message }, 500);
+  if (!data) return c.json({ error: 'post not found' }, 404);
+  return c.json({ post: data });
+});
+
 agent.post('/blog/posts/:id/publish', verifyAdmin, async (c) => {
   const id = c.req.param('id');
 
