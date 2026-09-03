@@ -51,6 +51,13 @@ app.use('/*', serveStatic({ root: './public' }));
 // cron hits /agent/cron/tick to drain a few tasks per minute.
 const IS_SERVERLESS = !!(process.env.VERCEL || process.env.CF_PAGES);
 
+// The queue worker is OPT-IN. It used to start automatically with any local
+// `tsx src/index.ts`, then poll claim_next_agent_task forever — a dev server
+// left running in a background terminal is invisible and quietly burns Supabase
+// egress for days. Nothing starts it now unless AGENT_WORKER=1 is set
+// explicitly, and /agent/cron/tick still drains the queue on demand.
+const WORKER_ENABLED = process.env.AGENT_WORKER === '1';
+
 if (!IS_SERVERLESS) {
   const port = config.PORT;
   console.log(`\n✓ CoBrop Agent · listening on http://localhost:${port}`);
@@ -58,7 +65,11 @@ if (!IS_SERVERLESS) {
   console.log(`✓ Supabase: ${config.SUPABASE_URL.replace(/^https?:\/\//, '').slice(0, 40)}\n`);
 
   serve({ fetch: app.fetch, port });
-  startWorker();
+  if (WORKER_ENABLED) {
+    startWorker();
+  } else {
+    console.log('· Queue worker OFF (set AGENT_WORKER=1 to enable). Drain with POST /agent/cron/tick\n');
+  }
 }
 
 export default app;

@@ -44,6 +44,8 @@ function makeLiveApi(cfg) {
     // Real rows from blog_posts. blog-draft.execute() writes status:'draft', so
     // publishing is a separate deliberate step rather than part of approval.
     blogPosts:        (n = 25)              => call(`/agent/blog/posts?limit=${n}`),
+    // Single post WITH its body — on demand only, never on a timer.
+    blogPost:         (id)                  => call(`/agent/blog/posts/${id}`),
     blogPublish:      (id)                  => call(`/agent/blog/posts/${id}/publish`, { method: 'POST', body: '{}' }),
     blogStats:        ()                    => call('/agent/blog/stats'),
     blogUpdate:       (id, patch)           => call(`/agent/blog/posts/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
@@ -299,13 +301,23 @@ function LiveAgentConsole({ cfg, onDisconnect }) {
     fetchMarketingFeed(); fetchBlogFeed(); fetchProspects(); fetchBlogPosts();
   }, [fetchApprovals, fetchActivity, fetchKpis, fetchMarketingFeed, fetchBlogFeed, fetchProspects, fetchBlogPosts]);
 
-  useEffect(() => { const id = setInterval(fetchApprovals,     8000); return () => clearInterval(id); }, [fetchApprovals]);
-  useEffect(() => { const id = setInterval(fetchActivity,      5000); return () => clearInterval(id); }, [fetchActivity]);
-  useEffect(() => { const id = setInterval(fetchKpis,         30000); return () => clearInterval(id); }, [fetchKpis]);
-  useEffect(() => { const id = setInterval(fetchMarketingFeed,20000); return () => clearInterval(id); }, [fetchMarketingFeed]);
-  useEffect(() => { const id = setInterval(fetchProspects,    20000); return () => clearInterval(id); }, [fetchProspects]);
-  useEffect(() => { const id = setInterval(fetchBlogFeed,     20000); return () => clearInterval(id); }, [fetchBlogFeed]);
-  useEffect(() => { const id = setInterval(fetchBlogPosts,    20000); return () => clearInterval(id); }, [fetchBlogPosts]);
+  // AUTO-POLLING IS OFF.
+  //
+  // These were seven timers (activity every 5s, approvals every 8s, four more at
+  // 20s, kpis at 30s) that ran for as long as the console tab stayed open — all
+  // hitting Supabase through the backend. Combined with /agent/activity shipping
+  // its jsonb `details` column, an idle open tab was enough to exhaust the
+  // project's egress quota and take the whole platform offline.
+  //
+  // Data now loads once on mount, and after any action you take. Use Refresh for
+  // anything else. If you want live updates back, do it with a single Postgres
+  // realtime subscription, not a fan of polling loops.
+  const REFRESH_MS = Number(localStorage.getItem('cobrop_agent_refresh_ms') || 0);
+  useEffect(() => {
+    if (!REFRESH_MS || REFRESH_MS < 60000) return; // opt-in, and never faster than 1/min
+    const id = setInterval(() => { fetchApprovals(); fetchActivity(); }, REFRESH_MS);
+    return () => clearInterval(id);
+  }, [REFRESH_MS, fetchApprovals, fetchActivity]);
 
   // Combined feed
   const allEvents = [...localEvents, ...polledEvents].slice(0, 80);
@@ -590,6 +602,7 @@ Output ONLY the post body (no title, no headings, no meta).`;
     marketingFeed, blogFeed,
     // Real blog_posts rows + the publish action behind the Publish button
     blogPosts, blogStats, publishBlogPost, updateBlogPost, refreshBlogPosts: fetchBlogPosts,
+    getBlogPost: (id) => api.blogPost(id).then(r => r.post),
     // Schedule helpers (for screens to call directly)
     scheduleMarketingPost: (body) => api.marketingSchedule(body).then(fetchMarketingFeed).catch(e => pushToast({ kind: 'error', title: 'Schedule failed', msg: e.message })),
     scheduleBlogDraft:     (body) => api.blogSchedule(body).then(fetchBlogFeed).catch(e => pushToast({ kind: 'error', title: 'Schedule failed', msg: e.message })),

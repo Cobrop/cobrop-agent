@@ -90,9 +90,10 @@ agent.get('/blog/posts', verifyAdmin, async (c) => {
   const status = c.req.query('status');
   let q = supabase()
     .from('blog_posts')
-    // `content` is included so the console can show the real body for review
-    // before publishing — that review is the whole point of the draft step.
-    .select('id, title, slug, excerpt, content, category, status, author_name, reading_time, views_count, published_at, created_at')
+    // `content` is NOT in the list payload — full post bodies on a polled
+    // endpoint is exactly the kind of thing that burns an egress quota. Preview
+    // and edit fetch one post at a time via GET /agent/blog/posts/:id below.
+    .select('id, title, slug, excerpt, category, status, author_name, reading_time, views_count, published_at, created_at')
     .order('created_at', { ascending: false })
     .limit(Math.min(Number(c.req.query('limit')) || 25, 100));
   if (status) q = q.eq('status', status);
@@ -141,6 +142,19 @@ agent.get('/blog/stats', verifyAdmin, async (c) => {
     },
     by_category: [...byCategory.values()].sort((a, b) => b.views - a.views || b.posts - a.posts),
   });
+});
+
+// One post with its body — fetched on demand when you open preview or edit,
+// never on a timer.
+agent.get('/blog/posts/:id', verifyAdmin, async (c) => {
+  const { data, error } = await supabase()
+    .from('blog_posts')
+    .select('id, title, slug, excerpt, content, category, status, author_name, published_at, created_at')
+    .eq('id', c.req.param('id'))
+    .maybeSingle();
+  if (error) return c.json({ error: error.message }, 500);
+  if (!data) return c.json({ error: 'post not found' }, 404);
+  return c.json({ post: data });
 });
 
 // Edit a post in place. Only these four fields — status/published_at belong to
@@ -423,11 +437,17 @@ agent.get('/kpis', verifyAdmin, async (c) => {
 // ── Recent activity (the live feed in Mission Control) ───────────
 agent.get('/activity', verifyAdmin, async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 50, 200);
+  // `details` is deliberately NOT selected. It's a jsonb blob that for blog and
+  // outreach actions carries full_message / full_body — whole post bodies. This
+  // endpoint is polled on a timer by the console, so shipping it meant tens of
+  // KB per row every few seconds. Pass ?details=1 for a one-off inspection.
+  const withDetails = c.req.query('details') === '1';
+  const cols = `id, capability, status, ref_entity, duration_ms, created_at${withDetails ? ', details' : ''}`;
   const { data, error } = await supabase()
     .from('agent_actions')
-    .select('id, capability, status, ref_entity, duration_ms, details, created_at')
+    .select(cols)
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .limit(withDetails ? Math.min(limit, 20) : limit);
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ events: data });
 });
@@ -440,7 +460,17 @@ agent.get('/activity', verifyAdmin, async (c) => {
 // it never invents or looks up prospects itself.
 agent.get('/prospects', verifyAdmin, async (c) => {
   const status = c.req.query('status');
-  let q = supabase().from('broker_prospects').select('*').order('created_at', { ascending: false });
+  // Bounded. This was select('*') with no limit at all — the entire
+  // broker_prospects table, every column, returned on every call. The console
+  // polled it on a 20s timer, so it read the whole table ~250 times a day.
+  // An unbounded read behind a timer is the shape that exhausted the egress
+  // quota; keep the limit even after the polling is gone.
+  const limit = Math.min(Number(c.req.query('limit')) || 100, 500);
+  let q = supabase()
+    .from('broker_prospects')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
   if (status) q = q.eq('status', status);
   const { data, error } = await q;
   if (error) return c.json({ error: error.message }, 500);

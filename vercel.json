@@ -10,10 +10,6 @@
       "includeFiles": "public/**"
     }
   },
-  "crons": [
-    {
-      "path": "/agent/cron/tick?max=5",
-      "schedule": "0 6 * * *"
-    }
-  ]
+  "_crons_disabled_note": "Cron removed after the Supabase egress quota was exhausted and the platform went offline. Nothing calls the agent automatically now: this crons array is empty, the GitHub Actions schedule in .github/workflows/cron.yml is commented out (workflow_dispatch only), the queue worker is opt-in (AGENT_WORKER=1), and the console no longer polls. Underneath all of that, src/db/supabase.ts now fails closed: the agent makes no Supabase request at all unless AGENT_DB=on. Deleting the keys would NOT have done this - config.ts defaults missing vars to '' and never exits, so requests still fire and 401. To run work: set AGENT_DB=on, then POST /agent/cron/tick. Restore this block only once the egress source is confirmed in Reports > Usage.",
+  "crons": []
 }

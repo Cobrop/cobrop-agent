@@ -1013,6 +1013,17 @@ function BlogPostEditor({ post, engine, onClose }) {
     content: post.content || "",
   });
   const [saving, setSaving] = React.useState(false);
+
+  // The list payload no longer carries `content`, so load the body once when the
+  // editor opens rather than keeping it in memory for every row.
+  React.useEffect(() => {
+    let cancelled = false;
+    if (post.content != null) return;
+    engine?.getBlogPost?.(post.id)
+      .then(full => { if (!cancelled && full) setForm(f => ({ ...f, content: full.content || "", excerpt: f.excerpt || full.excerpt || "" })); })
+      .catch(() => { if (!cancelled) setForm(f => ({ ...f, content: "(could not load post body)" })); });
+    return () => { cancelled = true; };
+  }, [post.id, post.content, engine]);
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
   const dirty = ["title", "category", "excerpt", "content"].some(k => form[k] !== (post[k] || ""));
 
@@ -1233,12 +1244,19 @@ function BlogScreen() {
               const isDraft = p.status !== "published";
               // "preview" (not "blog") — this is an existing stored post being
               // read back, not a fresh agent draft awaiting approval.
-              const openPost = () => engine.previewContent && engine.previewContent({
-                title: p.title,
-                eyebrow: p.category || "Blog",
-                kind: "preview",
-                body: htmlToText(p.content) || p.excerpt || "(no body stored for this post)",
-              });
+              // Body is fetched here, not carried in the list payload — the
+              // list is what the console reloads, and shipping every post's
+              // full content through it is what blew the egress quota.
+              const openPost = async () => {
+                if (!engine?.previewContent) return;
+                engine.previewContent({ title: p.title, eyebrow: p.category || "Blog", kind: "preview", body: "Loading…" });
+                let body = p.excerpt || "(no body stored for this post)";
+                try {
+                  const full = await engine.getBlogPost?.(p.id);
+                  if (full?.content) body = htmlToText(full.content);
+                } catch (e) { body = "Could not load post body: " + e.message; }
+                engine.previewContent({ title: p.title, eyebrow: p.category || "Blog", kind: "preview", body });
+              };
               return (
                 <div key={p.id || i} className="blog-post" style={{ cursor: "pointer" }} onClick={openPost}>
                   <div className={"blog-post__thumb tone-" + ((i % 5) + 1)}>{(p.category || "Post").split(" ")[0]}</div>
